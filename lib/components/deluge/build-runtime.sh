@@ -162,7 +162,7 @@ echo 'Installing locked Python packages into the private runtime'
   "${CACHE}/wheel-0.37.1-py2.py3-none-any.whl"
 while read -r digest filename url; do
   case "${filename:-}" in
-    six-* | pycparser-* | cffi-* | incremental-* | constantly-* | attrs-* | zope.interface-* | Automat-* | idna-* | hyperlink-* | enum34-* | ipaddress-* | cryptography-* | pyOpenSSL-* | pyasn1-* | pyasn1-modules-* | service_identity-* | MarkupSafe-* | Mako-* | chardet-* | pyxdg-* | PyHamcrest-* | Twisted-*)
+    six-* | pycparser-* | cffi-* | incremental-* | constantly-* | attrs-* | zope.interface-* | Automat-* | idna-* | hyperlink-* | enum34-* | ipaddress-* | cryptography-* | pyOpenSSL-* | pyasn1-* | pyasn1-modules-* | service_identity-* | pyasn1-modules-* | pyasn1-* | MarkupSafe-* | Mako-* | chardet-* | pyxdg-* | PyHamcrest-* | Twisted-*)
       "${PYTHON}" -m pip install --no-deps --no-build-isolation --no-cache-dir "${CACHE}/${filename}"
       ;;
   esac
