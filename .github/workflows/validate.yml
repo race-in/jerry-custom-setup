@@ -1,0 +1,59 @@
+name: Validate scripts
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shell-and-python:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes shellcheck
+
+      - name: Check Bash syntax
+        shell: bash
+        run: |
+          mapfile -d '' scripts < <(
+            find . -type f \\( -name '*.sh' -o -name '*.bash' -o -path './Install.sh' -o -path './bin/seedboxctl' \\) \\
+              -not -path './.git/*' -print0
+          )
+          if (( ${#scripts[@]} == 0 )); then
+            echo "No Bash scripts found."
+            exit 1
+          fi
+          for script in "${scripts[@]}"; do
+            echo "bash -n: ${script}"
+            bash -n "${script}"
+          done
+
+      - name: Run ShellCheck
+        shell: bash
+        run: |
+          mapfile -d '' scripts < <(
+            find . -type f \\( -name '*.sh' -o -name '*.bash' -o -path './Install.sh' -o -path './bin/seedboxctl' \\) \\
+              -not -path './.git/*' -print0
+          )
+          shellcheck --severity=warning --exclude=SC1091 "${scripts[@]}"
+
+      - name: Check Python syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          for path in Path(".").rglob("*.py"):
+              if ".git" in path.parts:
+                  continue
+              source = path.read_bytes()
+              compile(source, str(path), "exec")
+              print(f"Python syntax OK: {path}")
+          PY
