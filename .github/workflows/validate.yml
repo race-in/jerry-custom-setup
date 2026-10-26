@@ -24,7 +24,7 @@ jobs:
         shell: bash
         run: |
           mapfile -d '' scripts < <(
-            find . -type f \( -name '*.sh' -o -name '*.bash' -o -path './Install.sh' -o -path './bin/seedboxctl' \) \
+            find . -type f \( -name '*.sh' -o -name '*.bash' -o -path './Install.sh' -o -path './bin/seedboxctl' -o -path './bin/feral-deluge' \) \
               -not -path './.git/*' -print0
           )
           if (( ${#scripts[@]} == 0 )); then
@@ -50,7 +50,13 @@ jobs:
           shellcheck --severity=warning --exclude=SC1090,SC1091 \
             ./lib/components/deluge/build-runtime.sh \
             ./lib/components/deluge/build-runtime-2.sh \
-            ./lib/components/deluge.bash
+            ./lib/components/deluge.bash \
+            ./bin/feral-deluge
+
+      - name: Check Feral helper usage and syntax
+        run: |
+          bash -n ./bin/feral-deluge
+          bash ./bin/feral-deluge --help >/dev/null
 
       - name: Check Python syntax
         run: |
