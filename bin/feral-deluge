@@ -1,96 +1,47 @@
 #!/usr/bin/env bash
-# Feral/shared-slot Deluge helper. Reuses the provider-installed Deluge 1.3.15;
-# never uses sudo, APT, systemd, /opt, or /var.
+# Build and run Jerry's own Deluge 1.3.15 runtime in a Feral shared slot.
+# The provider-managed Deluge and ~/.config/deluge are never modified.
 set -Eeuo pipefail
 IFS=$'\n\t'
 umask 077
 
 readonly HOME_DIR="${HOME:?HOME is not set}"
+readonly REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+readonly BUILDER="${REPO_DIR}/lib/components/deluge/build-runtime-feral.sh"
+readonly RUNTIME="${HOME_DIR}/.local/opt/deluge-1.3.15-jerry"
 readonly CONFIG_DIR="${HOME_DIR}/.config/deluge-jerry"
 readonly DATA_DIR="${HOME_DIR}/private/deluge-jerry"
-readonly SOURCE_CORE="${HOME_DIR}/.config/deluge/core.conf"
+readonly SOURCE_CONFIG="${HOME_DIR}/.config/deluge"
+readonly CORE_FILE="${CONFIG_DIR}/core.conf"
+readonly WEB_FILE="${CONFIG_DIR}/web.conf"
 readonly AUTH_FILE="${CONFIG_DIR}/auth"
 readonly PID_FILE="${CONFIG_DIR}/deluged.pid"
+readonly WEB_PID_FILE="${CONFIG_DIR}/deluge-web.pid"
 readonly LOG_FILE="${CONFIG_DIR}/deluged.log"
+readonly WEB_LOG_FILE="${CONFIG_DIR}/deluge-web.log"
 readonly MARKER="${CONFIG_DIR}/.jerry-feral-deluge"
 
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 info() { printf '%s\n' "$*"; }
 warn() { printf 'Warning: %s\n' "$*" >&2; }
-
-require_nonroot() {
-  [[ "$(id -u)" -ne 0 ]] || die "Do not run this shared-slot helper as root or with sudo."
-}
+require_nonroot() { [[ "$(id -u)" -ne 0 ]] || die "Run as your normal Feral user, never root/sudo."; }
 
 require_tools() {
   local tool
-  for tool in python2 deluged mkdir chmod cp mv rm od tr hostname ps shuf tail sleep awk; do
+  for tool in bash python2 mkdir chmod cp mv rm od tr hostname ps shuf tail sleep awk curl sha256sum; do
     command -v "$tool" >/dev/null 2>&1 || die "Required command not found: $tool"
   done
 }
 
-check_provider_runtime() {
-  local py_version deluge_version lt_version
-  py_version="$(python2 -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null)" ||
-    die "Python 2 is unavailable. Install Deluge from the Feral web manager first."
-  [[ "$py_version" == "2.7" ]] || die "Expected Python 2.7, found Python $py_version."
-  deluge_version="$(python2 -c 'import deluge; print(getattr(deluge, "__version__", ""))' 2>/dev/null)" ||
-    die "Python 2 cannot import Deluge. Install Deluge from the Feral web manager first."
-  [[ "$deluge_version" == "1.3.15" ]] ||
-    die "This Feral mode supports the provider's Deluge 1.3.15 only; detected '$deluge_version'."
-  lt_version="$(python2 -c 'import libtorrent; print(getattr(libtorrent, "version", "unknown"))' 2>/dev/null)" ||
-    die "Python 2 cannot import libtorrent; keep the provider-managed Deluge installation."
-  [[ "$lt_version" == 1.* ]] || die "Expected a libtorrent 1.x runtime, found '$lt_version'."
-  info "Detected provider runtime: Deluge $deluge_version / libtorrent $lt_version"
+runtime_env() {
+  env -u PYTHONHOME -u PYTHONPATH PYTHONNOUSERSITE=1 \
+    LD_LIBRARY_PATH="${RUNTIME}/lib:${RUNTIME}/openssl/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$@"
 }
 
-read_core_value() {
-  local key="$1"
-  python2 - "$SOURCE_CORE" "$key" <<'PY'
-import json
-import sys
-
-path, key = sys.argv[1:3]
-with open(path, "r") as stream:
-    lines = stream.readlines()
-if len(lines) < 2:
-    raise SystemExit("Invalid Deluge core.conf framing")
-try:
-    config = json.loads("".join(lines[1:]))
-except Exception as exc:
-    raise SystemExit("Cannot parse Deluge core.conf: %s" % exc)
-value = config.get(key, "")
-if isinstance(value, (list, tuple)):
-    value = ",".join(str(item) for item in value)
-print(value)
-PY
-}
-
-port_is_free() {
-  python2 - "$1" <<'PY'
-import socket
-import sys
-port = int(sys.argv[1])
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-try:
-    sock.bind(("", port))
-except socket.error:
-    raise SystemExit(1)
-finally:
-    sock.close()
-PY
-}
-
-choose_port() {
-  local low="$1" high="$2" attempt candidate
-  for attempt in {1..80}; do
-    candidate="$(shuf -i "${low}-${high}" -n 1)" || continue
-    if port_is_free "$candidate"; then
-      printf '%s\n' "$candidate"
-      return 0
-    fi
-  done
-  return 1
+check_runtime() {
+  [[ -x "${RUNTIME}/bin/python2.7" && -x "${RUNTIME}/bin/deluged" && -x "${RUNTIME}/bin/deluge-web" ]] ||
+    die "Jerry's private runtime is not installed. Run: bash ${REPO_DIR}/bin/feral-deluge install"
+  SEEDBOX_DE_PREFIX="${RUNTIME}" runtime_env "${RUNTIME}/bin/python2.7" -s "${REPO_DIR}/lib/components/deluge/runtime-check.py"
 }
 
 validate_port() {
@@ -98,243 +49,307 @@ validate_port() {
     die "Port must be an integer from 1024 to 65535: $1"
 }
 
+port_is_free() {
+  python2 - "$1" <<'PY'
+import socket, sys
+port = int(sys.argv[1])
+for kind in (socket.SOCK_STREAM, socket.SOCK_DGRAM):
+    sock = socket.socket(socket.AF_INET, kind)
+    try:
+        sock.bind(("", port))
+    except socket.error:
+        sys.exit(1)
+    finally:
+        sock.close()
+PY
+}
+
+choose_port() {
+  local low="$1" high="$2" attempt candidate
+  for attempt in {1..100}; do
+    candidate="$(shuf -i "${low}-${high}" -n 1)" || continue
+    if port_is_free "$candidate"; then printf '%s\n' "$candidate"; return 0; fi
+  done
+  return 1
+}
+
+read_core_value() {
+  "${RUNTIME}/bin/python2.7" - "$CORE_FILE" "$1" <<'PY'
+import json, sys
+with open(sys.argv[1], "r") as stream:
+    lines = stream.readlines()
+if len(lines) < 2:
+    raise SystemExit("Invalid Deluge core.conf framing")
+config = json.loads("".join(lines[1:]))
+print(config.get(sys.argv[2], ""))
+PY
+}
+
 profile_is_ours() {
   [[ -f "$MARKER" && ! -L "$MARKER" && -d "$CONFIG_DIR" && ! -L "$CONFIG_DIR" ]]
 }
 
-read_rpc_port() {
-  read_core_value daemon_port
-}
-
 pid_is_ours() {
-  local pid="$1" args
+  local pid="$1" pattern="$2" args
   [[ "$pid" =~ ^[0-9]+$ && -r "/proc/$pid/cmdline" ]] || return 1
   args="$(ps -p "$pid" -o args= 2>/dev/null || true)"
-  [[ "$args" == *deluged* && "$args" == *"$CONFIG_DIR"* ]]
+  [[ "$args" == *"$pattern"* && "$args" == *"$CONFIG_DIR"* ]]
 }
 
 get_pid() {
-  [[ -f "$PID_FILE" && ! -L "$PID_FILE" ]] || return 1
-  local pid
-  IFS= read -r pid < "$PID_FILE" || true
-  pid_is_ours "$pid" || return 1
+  local file="$1" pattern="$2" pid
+  [[ -f "$file" && ! -L "$file" ]] || return 1
+  IFS= read -r pid < "$file" || true
+  pid_is_ours "$pid" "$pattern" || return 1
   printf '%s\n' "$pid"
 }
 
 start_daemon() {
-  local pid
-  profile_is_ours || die "No managed Feral profile found. Run: $0 install"
-  if pid="$(get_pid)"; then
-    info "Deluge is already running (PID $pid)."
-    return 0
+  local pid rpc_port
+  profile_is_ours || die "No managed profile found. Run install first."
+  if pid="$(get_pid "$PID_FILE" deluged)"; then info "Jerry deluged already running (PID $pid)."; else
+    rm -f -- "$PID_FILE"
+    rpc_port="$(read_core_value daemon_port)"
+    validate_port "$rpc_port"
+    info "Starting Jerry's private Deluge daemon (RPC $rpc_port)..."
+    runtime_env "${RUNTIME}/bin/deluged" -c "$CONFIG_DIR" -p "$rpc_port" -P "$PID_FILE" -L info -l "$LOG_FILE"
+    local attempt
+    for attempt in {1..15}; do
+      if pid="$(get_pid "$PID_FILE" deluged)"; then break; fi
+      sleep 1
+    done
+    [[ -n "${pid:-}" ]] || { tail -n 50 "$LOG_FILE" 2>/dev/null || true; die "Private deluged did not start."; }
   fi
-  rm -f -- "$PID_FILE"
-  local rpc_port
-  rpc_port="$(read_rpc_port)"
-  validate_port "$rpc_port"
-  info "Starting the separate Deluge daemon on RPC port $rpc_port..."
-  deluged -c "$CONFIG_DIR" -p "$rpc_port" -P "$PID_FILE" -L info -l "$LOG_FILE"
-  local attempt
-  for attempt in {1..12}; do
-    if pid="$(get_pid)"; then
-      info "Deluge started (PID $pid). Log: $LOG_FILE"
-      return 0
+
+  if pid="$(get_pid "$WEB_PID_FILE" deluge-web)"; then
+    info "Jerry WebUI already running (PID $pid)."
+  else
+    rm -f -- "$WEB_PID_FILE"
+    local web_port
+    web_port="$(read_web_port)"
+    info "Starting Jerry's private WebUI on port $web_port..."
+    runtime_env "${RUNTIME}/bin/deluge-web" -c "$CONFIG_DIR" -p "$web_port" -f -L info -l "$WEB_LOG_FILE" &
+    pid=$!
+    printf '%s\n' "$pid" > "$WEB_PID_FILE"
+    sleep 2
+    if ! pid_is_ours "$pid" deluge-web; then
+      rm -f -- "$WEB_PID_FILE"
+      tail -n 50 "$WEB_LOG_FILE" 2>/dev/null || true
+      die "Private WebUI did not stay running."
     fi
-    sleep 1
-  done
-  warn "The daemon did not become ready. Recent log output:"
-  tail -n 40 "$LOG_FILE" 2>/dev/null || true
-  return 1
+  fi
+  info "Jerry's Deluge instance is running separately from the provider instance."
 }
 
-stop_daemon() {
-  local pid attempt
-  if ! pid="$(get_pid)"; then
-    rm -f -- "$PID_FILE"
-    info "The managed Deluge daemon is not running."
-    return 0
-  fi
-  info "Stopping Deluge PID $pid..."
+read_web_port() {
+  "${RUNTIME}/bin/python2.7" - "$WEB_FILE" <<'PY'
+import json, sys
+with open(sys.argv[1], "r") as stream:
+    lines = stream.readlines()
+if len(lines) < 2:
+    raise SystemExit("Invalid Deluge web.conf framing")
+print(json.loads("".join(lines[1:])).get("port", 8112))
+PY
+}
+
+stop_one() {
+  local file="$1" pattern="$2" pid attempt
+  if ! pid="$(get_pid "$file" "$pattern")"; then rm -f -- "$file"; return 0; fi
+  info "Stopping managed $pattern (PID $pid)..."
   kill -TERM "$pid"
-  for attempt in {1..12}; do
-    if ! kill -0 "$pid" 2>/dev/null; then
-      rm -f -- "$PID_FILE"
-      info "Deluge stopped."
-      return 0
-    fi
+  for attempt in {1..15}; do
+    if ! kill -0 "$pid" 2>/dev/null || ! pid_is_ours "$pid" "$pattern"; then rm -f -- "$file"; return 0; fi
     sleep 1
   done
-  die "Deluge did not stop cleanly. Review $LOG_FILE; no force kill was attempted."
+  die "$pattern did not stop cleanly; no force kill attempted."
 }
 
 install_profile() {
-  local rpc_port="${1:-}" incoming_port="${2:-}" default_rpc
+  local rpc_port="" incoming_port="" web_port="" source_rpc
+  while (($#)); do
+    case "$1" in
+      --rpc-port) (($# >= 2)) || die "Missing --rpc-port value"; rpc_port="$2"; shift 2 ;;
+      --incoming-port) (($# >= 2)) || die "Missing --incoming-port value"; incoming_port="$2"; shift 2 ;;
+      --web-port) (($# >= 2)) || die "Missing --web-port value"; web_port="$2"; shift 2 ;;
+      --jobs) (($# >= 2)) || die "Missing --jobs value"; JOBS="$2"; shift 2 ;;
+      *) die "Unknown install option: $1" ;;
+    esac
+  done
   require_nonroot
   require_tools
-  check_provider_runtime
-  [[ -f "$SOURCE_CORE" && ! -L "$SOURCE_CORE" ]] ||
-    die "Missing $SOURCE_CORE. Install/enable Deluge in the Feral web manager first; this helper never replaces it."
+  [[ -f "${REPO_DIR}/lib/components/deluge/sources.lock" && -f "${REPO_DIR}/lib/components/deluge/patches.lock" ]] ||
+    die "Repository checkout is incomplete. Clone the full race-in/jerry-custom-setup repository."
+  [[ -f "${BUILDER}" && -f "${REPO_DIR}/lib/components/deluge/libtorrent-1.1.14.patch" ]] ||
+    die "Rootless builder or patch file missing from this checkout."
+  [[ -f "${SOURCE_CONFIG}/core.conf" && ! -L "${SOURCE_CONFIG}/core.conf" ]] ||
+    die "Provider Deluge core.conf not found. Install Deluge 1.3.15 from Feral's manager first."
+
+  if [[ ! -x "${RUNTIME}/bin/deluged" ]]; then
+    info "Building Jerry's separate Deluge 1.3.15 + Python 2.7.18 + patched libtorrent 1.1.14 runtime under ${RUNTIME}."
+    info "This requires a working compiler/toolchain and development headers on the shared slot; no sudo/apt is used."
+    bash "$BUILDER" --jobs "${JOBS:-2}"
+  fi
+  check_runtime
+
   if [[ -e "$CONFIG_DIR" ]]; then
-    profile_is_ours || die "$CONFIG_DIR already exists but is not a managed profile; refusing to overwrite it."
-    info "The managed profile already exists."
+    profile_is_ours || die "$CONFIG_DIR exists but is not a managed Jerry profile; refusing to overwrite."
+    info "Managed Jerry profile already exists."
     start_daemon
     show_connection
     return 0
   fi
 
-  default_rpc="$(read_core_value daemon_port)"
-  [[ "$default_rpc" =~ ^[0-9]+$ ]] || default_rpc=0
-  if [[ -z "$rpc_port" ]]; then
-    rpc_port="$(choose_port 10001 32001)" || die "Could not find a free RPC port."
-  fi
-  validate_port "$rpc_port"
-  [[ "$rpc_port" != "$default_rpc" ]] || die "RPC port conflicts with the provider-managed Deluge daemon."
+  source_rpc="$( "${RUNTIME}/bin/python2.7" - "$SOURCE_CONFIG/core.conf" <<'PY'
+import json, sys
+with open(sys.argv[1], "r") as stream:
+    lines = stream.readlines()
+print(json.loads("".join(lines[1:])).get("daemon_port", 58846))
+PY
+)"
+  [[ "$rpc_port" != "$source_rpc" ]] || die "Jerry RPC port must differ from the provider Deluge RPC port ($source_rpc)."
+  [[ -n "$rpc_port" ]] || rpc_port="$(choose_port 20000 32000)" || die "Could not find a free RPC port."
+  [[ -n "$incoming_port" ]] || incoming_port="$(choose_port 40000 60000)" || die "Could not find a free incoming port."
+  [[ -n "$web_port" ]] || web_port="$(choose_port 32001 39000)" || die "Could not find a free WebUI port."
+  validate_port "$rpc_port"; validate_port "$incoming_port"; validate_port "$web_port"
+  [[ "$rpc_port" != "$incoming_port" && "$rpc_port" != "$web_port" && "$incoming_port" != "$web_port" ]] ||
+    die "RPC, incoming, and WebUI ports must all be different."
   port_is_free "$rpc_port" || die "RPC port $rpc_port is already in use."
-  if [[ -z "$incoming_port" ]]; then
-    incoming_port="$(choose_port 40000 60000)" || die "Could not find a free incoming port."
-  fi
-  validate_port "$incoming_port"
-  [[ "$incoming_port" != "$rpc_port" ]] || die "RPC and incoming ports must be different."
   port_is_free "$incoming_port" || die "Incoming port $incoming_port is already in use."
+  port_is_free "$web_port" || die "WebUI port $web_port is already in use."
 
   mkdir -p -- "$CONFIG_DIR" "$DATA_DIR/data" "$DATA_DIR/watch" "$DATA_DIR/torrents" "$DATA_DIR/completed" "$CONFIG_DIR/plugins"
   chmod 700 "$CONFIG_DIR" "$DATA_DIR" "$DATA_DIR/data" "$DATA_DIR/watch" "$DATA_DIR/torrents" "$DATA_DIR/completed" "$CONFIG_DIR/plugins"
-  cp -- "$SOURCE_CORE" "$CONFIG_DIR/core.conf"
-  chmod 600 "$CONFIG_DIR/core.conf"
+  cp -- "$SOURCE_CONFIG/core.conf" "$CORE_FILE"
+  if [[ -f "$SOURCE_CONFIG/web.conf" && ! -L "$SOURCE_CONFIG/web.conf" ]]; then cp -- "$SOURCE_CONFIG/web.conf" "$WEB_FILE"; else printf '1\n{}\n' > "$WEB_FILE"; fi
+  chmod 600 "$CORE_FILE" "$WEB_FILE"
 
-  SEEDBOX_FERAL_SOURCE_CORE="$SOURCE_CORE" \
-  SEEDBOX_FERAL_CONFIG_DIR="$CONFIG_DIR" \
-  SEEDBOX_FERAL_DATA_DIR="$DATA_DIR" \
-  SEEDBOX_FERAL_RPC_PORT="$rpc_port" \
-  SEEDBOX_FERAL_INCOMING_PORT="$incoming_port" \
-  python2 - <<'PY'
-import json
-import os
-import tempfile
-
-source = os.environ["SEEDBOX_FERAL_SOURCE_CORE"]
-target = os.path.join(os.environ["SEEDBOX_FERAL_CONFIG_DIR"], "core.conf")
+  SEEDBOX_FERAL_CONFIG_DIR="$CONFIG_DIR" SEEDBOX_FERAL_DATA_DIR="$DATA_DIR" \
+  SEEDBOX_FERAL_RPC_PORT="$rpc_port" SEEDBOX_FERAL_INCOMING_PORT="$incoming_port" \
+  SEEDBOX_FERAL_WEB_PORT="$web_port" "${RUNTIME}/bin/python2.7" - <<'PY'
+import json, os, tempfile
+config_dir = os.environ["SEEDBOX_FERAL_CONFIG_DIR"]
 data = os.environ["SEEDBOX_FERAL_DATA_DIR"]
-rpc_port = int(os.environ["SEEDBOX_FERAL_RPC_PORT"])
-incoming_port = int(os.environ["SEEDBOX_FERAL_INCOMING_PORT"])
-
-with open(source, "r") as stream:
-    lines = stream.readlines()
-if len(lines) < 2:
-    raise SystemExit("Invalid source core.conf framing")
-version = lines[0].strip()
-config = json.loads("".join(lines[1:]))
-config.update({
-    "daemon_port": rpc_port,
-    "allow_remote": True,
-    "random_port": False,
-    "listen_ports": [incoming_port, incoming_port],
+rpc = int(os.environ["SEEDBOX_FERAL_RPC_PORT"])
+incoming = int(os.environ["SEEDBOX_FERAL_INCOMING_PORT"])
+web = int(os.environ["SEEDBOX_FERAL_WEB_PORT"])
+def load(path):
+    with open(path, "r") as stream: lines = stream.readlines()
+    if len(lines) < 2: raise SystemExit("Invalid Deluge config framing: " + path)
+    return lines[0].strip(), json.loads("".join(lines[1:]))
+def atomic(path, version, config):
+    fd, tmp = tempfile.mkstemp(prefix=".config.", dir=config_dir)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            stream.write(version + "\n")
+            stream.write(json.dumps(config, sort_keys=True, indent=2) + "\n")
+            stream.flush(); os.fsync(stream.fileno())
+        os.rename(tmp, path)
+    except Exception:
+        try: os.unlink(tmp)
+        except OSError: pass
+        raise
+core_path = os.path.join(config_dir, "core.conf")
+version, core = load(core_path)
+core.update({
+    "daemon_port": rpc, "allow_remote": True, "random_port": False,
+    "listen_ports": [incoming, incoming],
     "download_location": os.path.join(data, "data") + "/",
-    "state_location": os.path.join(os.environ["SEEDBOX_FERAL_CONFIG_DIR"], "state"),
     "autoadd_location": os.path.join(data, "watch") + "/",
     "torrentfiles_location": os.path.join(data, "torrents") + "/",
-    "plugins_location": os.path.join(os.environ["SEEDBOX_FERAL_CONFIG_DIR"], "plugins"),
+    "plugins_location": os.path.join(config_dir, "plugins"),
+    "state_location": os.path.join(config_dir, "state"),
     "move_completed": False,
     "move_completed_path": os.path.join(data, "completed") + "/",
 })
-fd, temporary = tempfile.mkstemp(prefix=".core.conf.", dir=os.path.dirname(target))
-try:
-    with os.fdopen(fd, "w") as stream:
-        stream.write(version + "\n")
-        stream.write(json.dumps(config, sort_keys=True, indent=2) + "\n")
-        stream.flush()
-        os.fsync(stream.fileno())
-    os.rename(temporary, target)
-except Exception:
-    try:
-        os.unlink(temporary)
-    except OSError:
-        pass
-    raise
+atomic(core_path, version, core)
+web_path = os.path.join(config_dir, "web.conf")
+version, webcfg = load(web_path)
+webcfg["port"] = web
+webcfg["default_daemon"] = "127.0.0.1:%d" % rpc
+atomic(web_path, version, webcfg)
 PY
 
-  local rpc_password
+  local rpc_password web_password salt
   rpc_password="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
-  [[ "${#rpc_password}" -eq 64 ]] || die "Could not generate a secure RPC password."
+  web_password="$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')"
+  salt="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+  [[ "${#rpc_password}" -eq 64 && "${#web_password}" -eq 48 && "${#salt}" -eq 32 ]] || die "Secure credential generation failed."
   printf '%s:%s:10\n' "$(id -un)" "$rpc_password" > "$AUTH_FILE"
   chmod 600 "$AUTH_FILE"
-  printf 'profile=jerry-feral-deluge\nrpc_port=%s\nincoming_port=%s\n' "$rpc_port" "$incoming_port" > "$MARKER"
+  SEEDBOX_FERAL_WEB_PASSWORD="$web_password" SEEDBOX_FERAL_WEB_SALT="$salt" "${RUNTIME}/bin/python2.7" - "$WEB_FILE" <<'PY'
+import hashlib, json, os, sys, tempfile
+path = sys.argv[1]
+with open(path, "r") as stream: lines = stream.readlines()
+cfg = json.loads("".join(lines[1:]))
+salt = os.environ["SEEDBOX_FERAL_WEB_SALT"]
+password = os.environ["SEEDBOX_FERAL_WEB_PASSWORD"]
+cfg["pwd_salt"] = salt
+cfg["pwd_sha1"] = hashlib.sha1((password + salt).encode("utf-8")).hexdigest()
+fd, tmp = tempfile.mkstemp(prefix=".web.", dir=os.path.dirname(path))
+with os.fdopen(fd, "w") as stream:
+    stream.write(lines[0].strip() + "\n" + json.dumps(cfg, sort_keys=True, indent=2) + "\n")
+    stream.flush(); os.fsync(stream.fileno())
+os.rename(tmp, path)
+PY
+  printf 'profile=jerry-feral-deluge\nrpc_port=%s\nincoming_port=%s\nweb_port=%s\n' "$rpc_port" "$incoming_port" "$web_port" > "$MARKER"
   chmod 600 "$MARKER"
-  info "Created a separate user-owned profile. The provider's original ~/.config/deluge was not changed."
   start_daemon
-  show_connection
+  printf '\nJerry private WebUI: http://%s:%s/\n' "$(hostname -f 2>/dev/null || hostname)" "$web_port"
+  printf 'WebUI username: admin\nWebUI password: %s\n' "$web_password"
+  printf 'RPC username: %s\nRPC password: %s\nRPC port: %s\nIncoming port: %s\n' "$(id -un)" "$rpc_password" "$rpc_port" "$incoming_port"
+  printf 'If Feral blocks direct port access, use an SSH tunnel or ask Feral support about allowed ports. Keep these credentials private.\n'
 }
 
 show_connection() {
-  profile_is_ours || die "No managed Feral profile found. Run: $0 install"
-  local rpc_port rpc_password host
-  rpc_port="$(read_rpc_port)"
-  rpc_password="$(awk -F: -v user="$(id -un)" '$1 == user {print $2; exit}' "$AUTH_FILE")"
-  [[ -n "$rpc_password" ]] || die "RPC credentials are missing from $AUTH_FILE."
-  host="$(hostname -f 2>/dev/null || hostname)"
-  printf '\nFeral thin-client connection details (keep the password private):\n'
-  printf 'Host:     10.0.0.1  (or %s)\n' "$host"
-  printf 'User:     %s\n' "$(id -un)"
+  profile_is_ours || die "No managed Jerry profile found."
+  local web_port rpc_port
+  web_port="$(read_web_port)"
+  rpc_port="$(read_core_value daemon_port)"
+  printf 'WebUI: http://%s:%s/\n' "$(hostname -f 2>/dev/null || hostname)" "$web_port"
   printf 'RPC port: %s\n' "$rpc_port"
-  printf 'Password: %s\n' "$rpc_password"
-  printf '\nThis is a separate daemon, not the provider WebUI instance.\n'
+  printf 'WebUI config: %s/web.conf (password is hashed; original password is shown only at install time)\n' "$CONFIG_DIR"
 }
 
 show_status() {
-  profile_is_ours || die "No managed Feral profile found. Run: $0 install"
-  local pid rpc_port
-  rpc_port="$(read_rpc_port)"
-  if pid="$(get_pid)"; then
-    info "Status: running (PID $pid; RPC port $rpc_port)"
-  else
-    info "Status: stopped (RPC port $rpc_port)"
-    return 1
-  fi
+  profile_is_ours || die "No managed Jerry profile found."
+  local daemon_pid web_pid
+  if daemon_pid="$(get_pid "$PID_FILE" deluged)"; then info "Jerry daemon: running (PID $daemon_pid)"; else info "Jerry daemon: stopped"; fi
+  if web_pid="$(get_pid "$WEB_PID_FILE" deluge-web)"; then info "Jerry WebUI: running (PID $web_pid; port $(read_web_port))"; else info "Jerry WebUI: stopped"; fi
+  info "Provider config and process are separate and untouched."
 }
 
 uninstall_profile() {
-  local purge_data=0 confirm=0 arg
-  for arg in "$@"; do
-    case "$arg" in
-      --purge-data) purge_data=1 ;;
-      --yes) confirm=1 ;;
-      *) die "Unknown uninstall option: $arg" ;;
-    esac
-  done
+  local purge=0 yes=0 arg
+  for arg in "$@"; do case "$arg" in --purge-data) purge=1 ;; --yes) yes=1 ;; *) die "Unknown uninstall option: $arg" ;; esac; done
   require_nonroot
-  profile_is_ours || die "No managed Feral profile found; refusing to remove an unmanaged path."
-  if ((purge_data && !confirm)); then
-    die "--purge-data requires --yes."
-  fi
-  stop_daemon
+  profile_is_ours || die "No managed Jerry profile found; refusing to remove an unmanaged path."
+  (( ! purge || yes )) || die "--purge-data requires --yes."
+  stop_one "$WEB_PID_FILE" deluge-web
+  stop_one "$PID_FILE" deluged
   rm -rf -- "$CONFIG_DIR"
-  if ((purge_data)); then
+  if ((purge)); then
     [[ "$DATA_DIR" == "$HOME_DIR/private/deluge-jerry" && ! -L "$DATA_DIR" ]] || die "Unsafe data path; refusing to purge."
     rm -rf -- "$DATA_DIR"
-    info "Removed the managed profile and its private data."
   else
-    info "Removed the managed profile. Download data remains at $DATA_DIR."
+    info "Download data retained at $DATA_DIR"
   fi
+  info "Removed Jerry's private profile. Provider Deluge was not changed."
 }
 
 usage() {
   cat <<'USAGE'
-Feral/shared-slot Deluge helper (rootless; uses the provider-installed runtime)
+Jerry Deluge 1.3.15 for Feral shared slots (separate private runtime)
 
 Usage:
-  feral-deluge install [--rpc-port PORT] [--incoming-port PORT]
-  feral-deluge start
-  feral-deluge stop
-  feral-deluge restart
-  feral-deluge status
-  feral-deluge connection
-  feral-deluge uninstall [--purge-data --yes]
+  bash bin/feral-deluge install [--jobs N] [--rpc-port PORT] [--incoming-port PORT] [--web-port PORT]
+  bash bin/feral-deluge start|stop|restart|status|connection
+  bash bin/feral-deluge uninstall [--purge-data --yes]
 
-Install Deluge 1.3.15 from the Feral web manager first. This helper creates a
-separate Deluge daemon/profile using the existing Python 2.7 + libtorrent 1.x.
-It does not compile libraries, run APT, use sudo/systemd, or alter the provider
-profile at ~/.config/deluge. The extra daemon is managed manually and connects
-through a Deluge 1.x thin client; it is not added to Feral's WebUI automatically.
+This builds Jerry's Python 2.7.18 + OpenSSL 1.1.1w + patched libtorrent 1.1.14
+and Deluge 1.3.15 under ~/.local/opt, without sudo/apt/systemd. It requires
+working build tools/development headers on the shared host. It creates separate
+config/data/ports and never replaces the provider-managed Deluge. A successful
+build is not guaranteed if Feral restricts compilers or development headers.
 USAGE
 }
 
@@ -342,27 +357,15 @@ main() {
   local action="${1:-help}"
   [[ $# -eq 0 ]] || shift
   case "$action" in
-    install)
-      local rpc_port="" incoming_port=""
-      while (($#)); do
-        case "$1" in
-          --rpc-port) (($# >= 2)) || die "Missing value for --rpc-port"; rpc_port="$2"; shift 2 ;;
-          --incoming-port) (($# >= 2)) || die "Missing value for --incoming-port"; incoming_port="$2"; shift 2 ;;
-          -h|--help) usage; return 0 ;;
-          *) die "Unknown install option: $1" ;;
-        esac
-      done
-      install_profile "$rpc_port" "$incoming_port"
-      ;;
-    start) (($# == 0)) || die "start takes no options"; require_nonroot; require_tools; start_daemon ;;
-    stop) (($# == 0)) || die "stop takes no options"; require_nonroot; stop_daemon ;;
-    restart) (($# == 0)) || die "restart takes no options"; require_nonroot; stop_daemon; start_daemon ;;
-    status) (($# == 0)) || die "status takes no options"; require_nonroot; require_tools; show_status ;;
-    connection) (($# == 0)) || die "connection takes no options"; require_nonroot; show_connection ;;
+    install) install_profile "$@" ;;
+    start) require_nonroot; check_runtime; start_daemon ;;
+    stop) require_nonroot; stop_one "$WEB_PID_FILE" deluge-web; stop_one "$PID_FILE" deluged ;;
+    restart) require_nonroot; check_runtime; stop_one "$WEB_PID_FILE" deluge-web; stop_one "$PID_FILE" deluged; start_daemon ;;
+    status) require_nonroot; show_status ;;
+    connection) require_nonroot; show_connection ;;
     uninstall) uninstall_profile "$@" ;;
     help|-h|--help) usage ;;
     *) usage >&2; die "Unknown command: $action" ;;
   esac
 }
-
 main "$@"
