@@ -78,10 +78,7 @@ read_core_value() {
   "${RUNTIME}/bin/python2.7" - "$CORE_FILE" "$1" <<'PY'
 import json, sys
 with open(sys.argv[1], "r") as stream:
-    lines = stream.readlines()
-if len(lines) < 2:
-    raise SystemExit("Invalid Deluge core.conf framing")
-config = json.loads("".join(lines[1:]))
+    config = json.load(stream)
 print(config.get(sys.argv[2], ""))
 PY
 }
@@ -146,10 +143,8 @@ read_web_port() {
   "${RUNTIME}/bin/python2.7" - "$WEB_FILE" <<'PY'
 import json, sys
 with open(sys.argv[1], "r") as stream:
-    lines = stream.readlines()
-if len(lines) < 2:
-    raise SystemExit("Invalid Deluge web.conf framing")
-print(json.loads("".join(lines[1:])).get("port", 8112))
+    config = json.load(stream)
+print(config.get("port", 8112))
 PY
 }
 
@@ -204,8 +199,8 @@ install_profile() {
   source_rpc="$( "${RUNTIME}/bin/python2.7" - "$SOURCE_CONFIG/core.conf" <<'PY'
 import json, sys
 with open(sys.argv[1], "r") as stream:
-    lines = stream.readlines()
-print(json.loads("".join(lines[1:])).get("daemon_port", 58846))
+    config = json.load(stream)
+print(config.get("daemon_port", 58846))
 PY
 )"
   [[ "$rpc_port" != "$source_rpc" ]] || die "Jerry RPC port must differ from the provider Deluge RPC port ($source_rpc)."
@@ -222,7 +217,7 @@ PY
   mkdir -p -- "$CONFIG_DIR" "$DATA_DIR/data" "$DATA_DIR/watch" "$DATA_DIR/torrents" "$DATA_DIR/completed" "$CONFIG_DIR/plugins"
   chmod 700 "$CONFIG_DIR" "$DATA_DIR" "$DATA_DIR/data" "$DATA_DIR/watch" "$DATA_DIR/torrents" "$DATA_DIR/completed" "$CONFIG_DIR/plugins"
   cp -- "$SOURCE_CONFIG/core.conf" "$CORE_FILE"
-  if [[ -f "$SOURCE_CONFIG/web.conf" && ! -L "$SOURCE_CONFIG/web.conf" ]]; then cp -- "$SOURCE_CONFIG/web.conf" "$WEB_FILE"; else printf '1\n{}\n' > "$WEB_FILE"; fi
+  if [[ -f "$SOURCE_CONFIG/web.conf" && ! -L "$SOURCE_CONFIG/web.conf" ]]; then cp -- "$SOURCE_CONFIG/web.conf" "$WEB_FILE"; else printf '{}\n' > "$WEB_FILE"; fi
   chmod 600 "$CORE_FILE" "$WEB_FILE"
 
   SEEDBOX_FERAL_CONFIG_DIR="$CONFIG_DIR" SEEDBOX_FERAL_DATA_DIR="$DATA_DIR" \
@@ -235,15 +230,14 @@ rpc = int(os.environ["SEEDBOX_FERAL_RPC_PORT"])
 incoming = int(os.environ["SEEDBOX_FERAL_INCOMING_PORT"])
 web = int(os.environ["SEEDBOX_FERAL_WEB_PORT"])
 def load(path):
-    with open(path, "r") as stream: lines = stream.readlines()
-    if len(lines) < 2: raise SystemExit("Invalid Deluge config framing: " + path)
-    return lines[0].strip(), json.loads("".join(lines[1:]))
-def atomic(path, version, config):
+    with open(path, "r") as stream:
+        return json.load(stream)
+def atomic(path, config):
     fd, tmp = tempfile.mkstemp(prefix=".config.", dir=config_dir)
     try:
         with os.fdopen(fd, "w") as stream:
-            stream.write(version + "\n")
-            stream.write(json.dumps(config, sort_keys=True, indent=2) + "\n")
+            json.dump(config, stream, sort_keys=True, indent=2)
+            stream.write("\n")
             stream.flush(); os.fsync(stream.fileno())
         os.rename(tmp, path)
     except Exception:
@@ -251,7 +245,7 @@ def atomic(path, version, config):
         except OSError: pass
         raise
 core_path = os.path.join(config_dir, "core.conf")
-version, core = load(core_path)
+core = load(core_path)
 core.update({
     "daemon_port": rpc, "allow_remote": True, "random_port": False,
     "listen_ports": [incoming, incoming],
@@ -263,13 +257,13 @@ core.update({
     "move_completed": False,
     "move_completed_path": os.path.join(data, "completed") + "/",
 })
-atomic(core_path, version, core)
+atomic(core_path, core)
 web_path = os.path.join(config_dir, "web.conf")
-version, webcfg = load(web_path)
+webcfg = load(web_path)
 webcfg["port"] = web
 webcfg["default_daemon"] = ""
 webcfg["daemon"] = []
-atomic(web_path, version, webcfg)
+atomic(web_path, webcfg)
 PY
 
   local rpc_password web_password salt
@@ -282,15 +276,16 @@ PY
   SEEDBOX_FERAL_WEB_PASSWORD="$web_password" SEEDBOX_FERAL_WEB_SALT="$salt" "${RUNTIME}/bin/python2.7" - "$WEB_FILE" <<'PY'
 import hashlib, json, os, sys, tempfile
 path = sys.argv[1]
-with open(path, "r") as stream: lines = stream.readlines()
-cfg = json.loads("".join(lines[1:]))
+with open(path, "r") as stream:
+    cfg = json.load(stream)
 salt = os.environ["SEEDBOX_FERAL_WEB_SALT"]
 password = os.environ["SEEDBOX_FERAL_WEB_PASSWORD"]
 cfg["pwd_salt"] = salt
 cfg["pwd_sha1"] = hashlib.sha1((password + salt).encode("utf-8")).hexdigest()
 fd, tmp = tempfile.mkstemp(prefix=".web.", dir=os.path.dirname(path))
 with os.fdopen(fd, "w") as stream:
-    stream.write(lines[0].strip() + "\n" + json.dumps(cfg, sort_keys=True, indent=2) + "\n")
+    json.dump(cfg, stream, sort_keys=True, indent=2)
+    stream.write("\n")
     stream.flush(); os.fsync(stream.fileno())
 os.rename(tmp, path)
 PY
