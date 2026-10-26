@@ -77,8 +77,19 @@ choose_port() {
 read_core_value() {
   "${RUNTIME}/bin/python2.7" - "$CORE_FILE" "$1" <<'PY'
 import json, sys
-with open(sys.argv[1], "r") as stream:
-    config = json.load(stream)
+def load_config(path):
+    with open(path, "r") as stream:
+        first = stream.readline()
+        try:
+            header = json.loads(first)
+        except ValueError:
+            stream.seek(0)
+            return json.load(stream)
+        if isinstance(header, dict) and "file" in header and "format" in header:
+            return json.load(stream)
+        stream.seek(0)
+        return json.load(stream)
+config = load_config(sys.argv[1])
 print(config.get(sys.argv[2], ""))
 PY
 }
@@ -142,8 +153,19 @@ start_daemon() {
 read_web_port() {
   "${RUNTIME}/bin/python2.7" - "$WEB_FILE" <<'PY'
 import json, sys
-with open(sys.argv[1], "r") as stream:
-    config = json.load(stream)
+def load_config(path):
+    with open(path, "r") as stream:
+        first = stream.readline()
+        try:
+            header = json.loads(first)
+        except ValueError:
+            stream.seek(0)
+            return json.load(stream)
+        if isinstance(header, dict) and "file" in header and "format" in header:
+            return json.load(stream)
+        stream.seek(0)
+        return json.load(stream)
+config = load_config(sys.argv[1])
 print(config.get("port", 8112))
 PY
 }
@@ -189,17 +211,43 @@ install_profile() {
   check_runtime
 
   if [[ -e "$CONFIG_DIR" ]]; then
-    profile_is_ours || die "$CONFIG_DIR exists but is not a managed Jerry profile; refusing to overwrite."
-    info "Managed Jerry profile already exists."
-    start_daemon
-    show_connection
-    return 0
+    if profile_is_ours; then
+      info "Managed Jerry profile already exists."
+      start_daemon
+      show_connection
+      return 0
+    fi
+    [[ -d "$CONFIG_DIR" && ! -L "$CONFIG_DIR" ]] || die "$CONFIG_DIR exists but is not a safe directory; refusing to overwrite."
+    local entry name
+    for entry in "$CONFIG_DIR"/* "$CONFIG_DIR"/.[!.]*; do
+      [[ -e "$entry" || -L "$entry" ]] || continue
+      name="${entry##*/}"
+      case "$name" in
+        core.conf|web.conf|plugins) ;;
+        *) die "Incomplete profile contains unexpected entry '$name'; refusing to remove it." ;;
+      esac
+      [[ ! -L "$entry" ]] || die "Incomplete profile entry '$name' is a symlink; refusing to remove it."
+    done
+    [[ -f "$CORE_FILE" && -f "$WEB_FILE" && -d "$CONFIG_DIR/plugins" ]] || die "Incomplete profile layout is not recognized; refusing to remove it."
+    warn "Removing only the recognized incomplete Jerry config from the earlier failed setup; runtime and download data will be kept."
+    rm -rf -- "$CONFIG_DIR"
   fi
 
   source_rpc="$( "${RUNTIME}/bin/python2.7" - "$SOURCE_CONFIG/core.conf" <<'PY'
 import json, sys
-with open(sys.argv[1], "r") as stream:
-    config = json.load(stream)
+def load_config(path):
+    with open(path, "r") as stream:
+        first = stream.readline()
+        try:
+            header = json.loads(first)
+        except ValueError:
+            stream.seek(0)
+            return json.load(stream)
+        if isinstance(header, dict) and "file" in header and "format" in header:
+            return json.load(stream)
+        stream.seek(0)
+        return json.load(stream)
+config = load_config(sys.argv[1])
 print(config.get("daemon_port", 58846))
 PY
 )"
@@ -231,11 +279,21 @@ incoming = int(os.environ["SEEDBOX_FERAL_INCOMING_PORT"])
 web = int(os.environ["SEEDBOX_FERAL_WEB_PORT"])
 def load(path):
     with open(path, "r") as stream:
+        first = stream.readline()
+        try:
+            header = json.loads(first)
+        except ValueError:
+            stream.seek(0)
+            return json.load(stream)
+        if isinstance(header, dict) and "file" in header and "format" in header:
+            return json.load(stream)
+        stream.seek(0)
         return json.load(stream)
 def atomic(path, config):
     fd, tmp = tempfile.mkstemp(prefix=".config.", dir=config_dir)
     try:
         with os.fdopen(fd, "w") as stream:
+            stream.write(json.dumps({"file": 1, "format": 1}) + "\n")
             json.dump(config, stream, sort_keys=True, indent=2)
             stream.write("\n")
             stream.flush(); os.fsync(stream.fileno())
@@ -277,13 +335,25 @@ PY
 import hashlib, json, os, sys, tempfile
 path = sys.argv[1]
 with open(path, "r") as stream:
-    cfg = json.load(stream)
+    first = stream.readline()
+    try:
+        header = json.loads(first)
+    except ValueError:
+        stream.seek(0)
+        cfg = json.load(stream)
+    else:
+        if isinstance(header, dict) and "file" in header and "format" in header:
+            cfg = json.load(stream)
+        else:
+            stream.seek(0)
+            cfg = json.load(stream)
 salt = os.environ["SEEDBOX_FERAL_WEB_SALT"]
 password = os.environ["SEEDBOX_FERAL_WEB_PASSWORD"]
 cfg["pwd_salt"] = salt
 cfg["pwd_sha1"] = hashlib.sha1((password + salt).encode("utf-8")).hexdigest()
 fd, tmp = tempfile.mkstemp(prefix=".web.", dir=os.path.dirname(path))
 with os.fdopen(fd, "w") as stream:
+    stream.write(json.dumps({"file": 1, "format": 1}) + "\n")
     json.dump(cfg, stream, sort_keys=True, indent=2)
     stream.write("\n")
     stream.flush(); os.fsync(stream.fileno())
