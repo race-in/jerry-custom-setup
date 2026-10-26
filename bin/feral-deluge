@@ -298,7 +298,7 @@ PY
   chmod 600 "$MARKER"
   start_daemon
   printf '\nJerry private WebUI: http://%s:%s/\n' "$(hostname -f 2>/dev/null || hostname)" "$web_port"
-  printf 'WebUI username: admin\nWebUI password: %s\n' "$web_password"
+  printf 'WebUI password: %s\n' "$web_password"
   printf 'RPC username: %s\nRPC password: %s\nRPC port: %s\nIncoming port: %s\n' "$(id -un)" "$rpc_password" "$rpc_port" "$incoming_port"
   printf 'If Feral blocks direct port access, use an SSH tunnel or ask Feral support about allowed ports. Keep these credentials private.\n'
 }
