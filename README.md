@@ -88,6 +88,24 @@ Omitting version options selects legacy **1.3.15 / 1.1.14**, supported on Debian
 
 **Shared seedbox note:** this Deluge installer is not compatible with Feral/rootless accounts or Debian 9/Stretch. It requires root, systemd, APT and writes under `/opt`, `/var/cache` and `/run/lock`. Keep the provider's existing Deluge installation and data; removing the OS check alone will not make this rootless.
 
+### Feral shared slot: separate rootless Deluge instance
+
+Feral shared slots do not provide root, APT, or system systemd. First install Deluge 1.x from Feral's web manager, as described in [Feral's Deluge guide](https://www.feralhosting.com/wiki/software/deluge). Then use the separate helper below as your normal SSH user (never with `sudo`). It reuses the provider's Python 2.7/Deluge 1.x runtime, creates an isolated config under `~/.config/deluge-jerry` and data under `~/private/deluge-jerry`, and does not edit `~/.config/deluge` or replace the provider's process.
+
+From a checkout of this repository:
+
+```bash
+bash bin/feral-deluge install
+bash bin/feral-deluge status
+bash bin/feral-deluge connection
+bash bin/feral-deluge stop
+bash bin/feral-deluge start
+bash bin/feral-deluge restart
+bash bin/feral-deluge uninstall
+```
+
+This is an **additional daemon**, not an extra WebUI: connect to its printed host/user/RPC-port/password with a Deluge 1.x thin client. It is not added to Feral's managed WebUI automatically. The helper intentionally refuses to build or replace Deluge, Python, or libtorrent on the shared host. Incoming ports may need provider-side allowance; do not assume a port is publicly reachable. `uninstall` keeps downloaded data; `uninstall --purge-data --yes` also deletes the helper's dedicated data directory. Review the helper before running it, and keep the RPC password private.
+
 Open `http://SERVER_IP:8112` for WebUI access and restrict the port to trusted sources; daemon RPC stays on loopback. Deluge is not included in the default or rootless profiles. See the guide for combined installs and [lifecycle commands](Torrent%20Clients/Deluge/README.md#upgrade-and-uninstall).
 
 ## Upgrade and uninstall
