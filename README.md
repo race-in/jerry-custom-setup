@@ -90,9 +90,9 @@ Omitting version options selects legacy **1.3.15 / 1.1.14**, supported on Debian
 
 ### Feral shared slot: separate rootless Deluge instance
 
-Feral shared slots do not provide root, APT, or system systemd. First install Deluge 1.x from Feral's web manager, as described in [Feral's Deluge guide](https://www.feralhosting.com/wiki/software/deluge). Then use the separate helper below as your normal SSH user (never with `sudo`). It builds a separate Jerry runtime (Python 2.7.18, OpenSSL 1.1.1w, patched libtorrent 1.1.14, Deluge 1.3.15) under `~/.local/opt/deluge-1.3.15-jerry`, then creates its own config under `~/.config/deluge-jerry` and data under `~/private/deluge-jerry`. It does not replace the provider's runtime or edit `~/.config/deluge`.
+For Feral shared hosting, use the dedicated [Feral Deluge guide](docs/feral-deluge.md) for requirements, installation, port and URL setup, all commands, credentials, storage paths, updates, troubleshooting, and safe uninstall.
 
-Clone the full repository first (downloading only `bin/feral-deluge` is not enough because the builder, locked sources, patch and runtime validator are separate files):
+**Quick start:** install Deluge 1.x from Feral's own web manager first, then run the following as your normal SSH user (never with `sudo`):
 
 ```bash
 git clone https://github.com/race-in/jerry-custom-setup.git
@@ -100,15 +100,9 @@ cd jerry-custom-setup
 bash bin/feral-deluge install --jobs 1
 bash bin/feral-deluge status
 bash bin/feral-deluge connection
-bash bin/feral-deluge stop
-bash bin/feral-deluge start
-bash bin/feral-deluge restart
-bash bin/feral-deluge uninstall
 ```
 
-This starts a **second daemon and a separate WebUI** with a generated WebUI password printed once during installation. It is not added to Feral's managed WebUI automatically. The private build requires working compiler tools and development headers already available to your account; the script never runs APT or sudo. If Feral restricts compilation, this private runtime cannot be built on that slot without provider support. Incoming ports may need provider-side allowance; do not assume the WebUI or BitTorrent port is publicly reachable. `uninstall` keeps downloaded data; `uninstall --purge-data --yes` also deletes the helper's dedicated data directory. The compiled private runtime remains under `~/.local/opt` so it can be reused; review the helper and keep the RPC/WebUI passwords private.
-
-Open `http://SERVER_IP:8112` for WebUI access and restrict the port to trusted sources; daemon RPC stays on loopback. Deluge is not included in the default or rootless profiles. See the guide for combined installs and [lifecycle commands](Torrent%20Clients/Deluge/README.md#upgrade-and-uninstall).
+This builds a separate Deluge 1.3.15 / Python 2.7.18 / patched libtorrent 1.1.14 runtime and keeps its config/data separate from Feral's provider-managed instance. Compilation requires a working toolchain and development headers available to the account; provider restrictions can prevent the build. The helper does not configure a public reverse proxy or guarantee that selected ports are externally reachable. See the [full Feral guide](docs/feral-deluge.md) before installing or uninstalling.
 
 ## Upgrade and uninstall
 
