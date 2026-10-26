@@ -116,7 +116,7 @@ find_ours_web_pid() {
 }
 
 get_pid() {
-  local file="$1" pattern="$2" pid ignored
+  local file="$1" pattern="$2" pid
   [[ -f "$file" && ! -L "$file" ]] || return 1
   # Deluge 1.3 writes its PID file as "PID;PORT", not just "PID".
   IFS=';' read -r pid _ < "$file" || true
