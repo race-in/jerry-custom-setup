@@ -85,7 +85,7 @@ def load_config(path):
         except ValueError:
             stream.seek(0)
             return json.load(stream)
-        if isinstance(header, dict) and "file" in header and "format" in header:
+        if isinstance(header, dict) and "file" in header:
             return json.load(stream)
         stream.seek(0)
         return json.load(stream)
@@ -161,7 +161,7 @@ def load_config(path):
         except ValueError:
             stream.seek(0)
             return json.load(stream)
-        if isinstance(header, dict) and "file" in header and "format" in header:
+        if isinstance(header, dict) and "file" in header:
             return json.load(stream)
         stream.seek(0)
         return json.load(stream)
@@ -243,7 +243,7 @@ def load_config(path):
         except ValueError:
             stream.seek(0)
             return json.load(stream)
-        if isinstance(header, dict) and "file" in header and "format" in header:
+        if isinstance(header, dict) and "file" in header:
             return json.load(stream)
         stream.seek(0)
         return json.load(stream)
@@ -285,7 +285,7 @@ def load(path):
         except ValueError:
             stream.seek(0)
             return json.load(stream)
-        if isinstance(header, dict) and "file" in header and "format" in header:
+        if isinstance(header, dict) and "file" in header:
             return json.load(stream)
         stream.seek(0)
         return json.load(stream)
@@ -293,7 +293,7 @@ def atomic(path, config):
     fd, tmp = tempfile.mkstemp(prefix=".config.", dir=config_dir)
     try:
         with os.fdopen(fd, "w") as stream:
-            stream.write(json.dumps({"file": 1, "format": 1}) + "\n")
+            stream.write(json.dumps({"file": 1}) + "\n")
             json.dump(config, stream, sort_keys=True, indent=2)
             stream.write("\n")
             stream.flush(); os.fsync(stream.fileno())
@@ -342,7 +342,7 @@ with open(path, "r") as stream:
         stream.seek(0)
         cfg = json.load(stream)
     else:
-        if isinstance(header, dict) and "file" in header and "format" in header:
+        if isinstance(header, dict) and "file" in header:
             cfg = json.load(stream)
         else:
             stream.seek(0)
@@ -353,7 +353,7 @@ cfg["pwd_salt"] = salt
 cfg["pwd_sha1"] = hashlib.sha1((password + salt).encode("utf-8")).hexdigest()
 fd, tmp = tempfile.mkstemp(prefix=".web.", dir=os.path.dirname(path))
 with os.fdopen(fd, "w") as stream:
-    stream.write(json.dumps({"file": 1, "format": 1}) + "\n")
+    stream.write(json.dumps({"file": 1}) + "\n")
     json.dump(cfg, stream, sort_keys=True, indent=2)
     stream.write("\n")
     stream.flush(); os.fsync(stream.fileno())
