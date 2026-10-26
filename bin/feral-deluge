@@ -25,7 +25,7 @@ require_nonroot() {
 
 require_tools() {
   local tool
-  for tool in python2 deluged mkdir chmod cp mv rm od tr hostname ps; do
+  for tool in python2 deluged mkdir chmod cp mv rm od tr hostname ps shuf tail sleep awk; do
     command -v "$tool" >/dev/null 2>&1 || die "Required command not found: $tool"
   done
 }
@@ -231,6 +231,7 @@ config.update({
     "random_port": False,
     "listen_ports": [incoming_port, incoming_port],
     "download_location": os.path.join(data, "data") + "/",
+    "state_location": os.path.join(os.environ["SEEDBOX_FERAL_CONFIG_DIR"], "state"),
     "autoadd_location": os.path.join(data, "watch") + "/",
     "torrentfiles_location": os.path.join(data, "torrents") + "/",
     "plugins_location": os.path.join(os.environ["SEEDBOX_FERAL_CONFIG_DIR"], "plugins"),
@@ -294,7 +295,6 @@ show_status() {
 
 uninstall_profile() {
   local purge_data=0 confirm=0 arg
-  shift || true
   for arg in "$@"; do
     case "$arg" in
       --purge-data) purge_data=1 ;;
