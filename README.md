@@ -86,6 +86,8 @@ bash <(wget -qO- https://raw.githubusercontent.com/jerry048/Dedicated-Seedbox/ma
 
 Omitting version options selects legacy **1.3.15 / 1.1.14**, supported on Debian 11+/Ubuntu 20.04+ with root and systemd; its unsupported-runtime warning is informational, not an installation gate. libtorrent 2.x rejects disk-cache options. See the [version, security and private-runtime guide](Torrent%20Clients/Deluge/README.md).
 
+**Shared seedbox note:** this Deluge installer is not compatible with Feral/rootless accounts or Debian 9/Stretch. It requires root, systemd, APT and writes under `/opt`, `/var/cache` and `/run/lock`. Keep the provider's existing Deluge installation and data; removing the OS check alone will not make this rootless.
+
 Open `http://SERVER_IP:8112` for WebUI access and restrict the port to trusted sources; daemon RPC stays on loopback. Deluge is not included in the default or rootless profiles. See the guide for combined installs and [lifecycle commands](Torrent%20Clients/Deluge/README.md#upgrade-and-uninstall).
 
 ## Upgrade and uninstall
