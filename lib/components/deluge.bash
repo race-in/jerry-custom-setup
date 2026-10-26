@@ -321,7 +321,9 @@ deluge::read_state_for_user() {
     [[ "${ARGS[deluge_libtorrent_version]#v}" == "${ARGS[libtorrent_version]#v}" ]] || return 2
   fi
   if args::has deluge_version || args::has deluge_libtorrent_version || args::has libtorrent_version; then
-    local requested_version="$(args::get deluge_version "${recorded_version}")" requested_lib="$(args::get deluge_libtorrent_version "$(args::get libtorrent_version "${recorded_lib}")")"
+    local requested_version requested_lib
+    requested_version="$(args::get deluge_version "${recorded_version}")"
+    requested_lib="$(args::get deluge_libtorrent_version "$(args::get libtorrent_version "${recorded_lib}")")"
     [[ "${requested_version#v}" == "${recorded_version}" && "${requested_lib#v}" == "${recorded_lib}" ]] || {
       ui::error "$(ui::tr '版本/ABI 切换需手动迁移或使用新 Unix 账号；upgrade 保留已记录的版本组合。' 'Version/ABI switches require manual migration or a new Unix account; upgrade preserves the recorded pair.')"
       return 2
