@@ -12,6 +12,12 @@
 
 与 qBittorrent 共用生命周期管理、实例状态、进度、安装器日志和监控机制。不替换系统 Python、不安装旧发行版软件包、不注册全局库搜索路径，也不依赖 Docker。默认安装不包含 Deluge；不支持 rootless。
 
+## 共享 Seedbox 兼容性（Feral 等平台）
+
+**不要在 Feral 或类似的共享/rootless Seedbox 上运行此 Deluge 组件。** 生命周期管理需要 root 和 systemd，原生构建器会写入 `/opt`、`/var/cache` 和 `/run/lock`，安装 APT 构建依赖，并要求完整的 Debian/Ubuntu 主机。Debian 9/Stretch 也低于本文声明的最低系统版本。仅删除系统版本检查并不能让安装器支持 rootless。
+
+在托管型共享 Seedbox 上，请保留服务商提供的 Deluge 安装及现有配置、插件、torrent 文件、会话状态和下载数据。不要运行私有运行环境构建器，也不要替换系统 Python。真正支持 Feral 的 rootless 方案需要独立且经过专门测试的构建和进程管理路径；本仓库目前不提供该实现。
+
 ## 旧版本安全提示
 
 Deluge 1.3.15、Python 2.7、OpenSSL 1.1.1 及兼容的 Python 依赖均已停止维护。固定版本可以让安装过程可复现，**不代表这些软件安全或仍受维护**。仅在确实需要 Deluge 1.3.15 的场景使用。BT 引擎仍会处理不可信的网络数据；私有运行环境和 systemd 限制无法消除其中的漏洞。
