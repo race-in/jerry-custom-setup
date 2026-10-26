@@ -104,7 +104,7 @@ bash bin/feral-deluge restart
 bash bin/feral-deluge uninstall
 ```
 
-This is an **additional daemon**, not an extra WebUI: connect to its printed host/user/RPC-port/password with a Deluge 1.x thin client. It is not added to Feral's managed WebUI automatically. The helper intentionally refuses to build or replace Deluge, Python, or libtorrent on the shared host. Incoming ports may need provider-side allowance; do not assume a port is publicly reachable. `uninstall` keeps downloaded data; `uninstall --purge-data --yes` also deletes the helper's dedicated data directory. Review the helper before running it, and keep the RPC password private.
+This starts a **second daemon and a separate WebUI** with a generated WebUI password printed once during installation. It is not added to Feral's managed WebUI automatically. The private build requires working compiler tools and development headers already available to your account; the script never runs APT or sudo. If Feral restricts compilation, this private runtime cannot be built on that slot without provider support. Incoming ports may need provider-side allowance; do not assume the WebUI or BitTorrent port is publicly reachable. `uninstall` keeps downloaded data; `uninstall --purge-data --yes` also deletes the helper's dedicated data directory. The compiled private runtime remains under `~/.local/opt` so it can be reused; review the helper and keep the RPC/WebUI passwords private.
 
 Open `http://SERVER_IP:8112` for WebUI access and restrict the port to trusted sources; daemon RPC stays on loopback. Deluge is not included in the default or rootless profiles. See the guide for combined installs and [lifecycle commands](Torrent%20Clients/Deluge/README.md#upgrade-and-uninstall).
 
