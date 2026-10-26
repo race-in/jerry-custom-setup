@@ -101,6 +101,19 @@ pid_is_ours() {
   [[ "$args" == *"$pattern"* && "$args" == *"$CONFIG_DIR"* ]]
 }
 
+find_ours_web_pid() {
+  local pid args
+  # Find the real WebUI process by its private runtime and config path.
+  while IFS=' ' read -r pid args; do
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    if [[ "$args" == *"${RUNTIME}/bin/deluge-web"* && "$args" == *"$CONFIG_DIR"* ]]; then
+      printf '%s\n' "$pid"
+      return 0
+    fi
+  done < <(ps -eo pid=,args= 2>/dev/null)
+  return 1
+}
+
 get_pid() {
   local file="$1" pattern="$2" pid ignored
   [[ -f "$file" && ! -L "$file" ]] || return 1
@@ -129,20 +142,29 @@ start_daemon() {
 
   if pid="$(get_pid "$WEB_PID_FILE" deluge-web)"; then
     info "Jerry WebUI already running (PID $pid)."
+  elif pid="$(find_ours_web_pid)"; then
+    # Recover from a previous launch where Deluge forked and the wrapper PID
+    # was recorded instead of the actual WebUI PID.
+    printf '%s\n' "$pid" > "$WEB_PID_FILE"
+    info "Jerry WebUI already running (PID $pid; recovered PID file)."
   else
     rm -f -- "$WEB_PID_FILE"
-    local web_port
+    local web_port attempt
     web_port="$(read_web_port)"
     info "Starting Jerry's private WebUI on port $web_port..."
-    runtime_env "${RUNTIME}/bin/deluge-web" -c "$CONFIG_DIR" -p "$web_port" -f -L info -l "$WEB_LOG_FILE" &
-    pid=$!
-    printf '%s\n' "$pid" > "$WEB_PID_FILE"
-    sleep 2
-    if ! pid_is_ours "$pid" deluge-web; then
+    # Do not pass -f/--fork: keep the real WebUI process manageable via $!.
+    runtime_env "${RUNTIME}/bin/deluge-web" -c "$CONFIG_DIR" -p "$web_port" -L info -l "$WEB_LOG_FILE" &
+    pid=""
+    for ((attempt=0; attempt<10; attempt++)); do
+      if pid="$(find_ours_web_pid)"; then break; fi
+      sleep 1
+    done
+    if [[ -z "$pid" ]] || ! pid_is_ours "$pid" deluge-web; then
       rm -f -- "$WEB_PID_FILE"
       tail -n 50 "$WEB_LOG_FILE" 2>/dev/null || true
       die "Private WebUI did not stay running."
     fi
+    printf '%s\n' "$pid" > "$WEB_PID_FILE"
   fi
   info "Jerry's Deluge instance is running separately from the provider instance."
 }
