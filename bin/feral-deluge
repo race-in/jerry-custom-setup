@@ -166,6 +166,7 @@ stop_one() {
 
 install_profile() {
   local rpc_port="" incoming_port="" web_port="" source_rpc
+  JOBS=1
   while (($#)); do
     case "$1" in
       --rpc-port) (($# >= 2)) || die "Missing --rpc-port value"; rpc_port="$2"; shift 2 ;;
@@ -265,7 +266,8 @@ atomic(core_path, version, core)
 web_path = os.path.join(config_dir, "web.conf")
 version, webcfg = load(web_path)
 webcfg["port"] = web
-webcfg["default_daemon"] = "127.0.0.1:%d" % rpc
+webcfg["default_daemon"] = ""
+webcfg["daemon"] = []
 atomic(web_path, version, webcfg)
 PY
 
@@ -307,7 +309,12 @@ show_connection() {
   rpc_port="$(read_core_value daemon_port)"
   printf 'WebUI: http://%s:%s/\n' "$(hostname -f 2>/dev/null || hostname)" "$web_port"
   printf 'RPC port: %s\n' "$rpc_port"
-  printf 'WebUI config: %s/web.conf (password is hashed; original password is shown only at install time)\n' "$CONFIG_DIR"
+  local rpc_user rpc_password
+  rpc_user="$(id -un)"
+  rpc_password="$(awk -F: -v user="$rpc_user" '$1 == user {print $2; exit}' "$AUTH_FILE")"
+  printf 'RPC username: %s\nRPC password: %s\n' "$rpc_user" "$rpc_password"
+  printf 'Add 127.0.0.1:%s in the WebUI Connection Manager and use these RPC credentials.\n' "$rpc_port"
+  printf 'WebUI config: %s/web.conf (WebUI password is shown only during install)\n' "$CONFIG_DIR"
 }
 
 show_status() {
