@@ -53,7 +53,7 @@ Deluge 需要 root 和 systemd。1.3.15 支持 Debian 11+/Ubuntu 20.04+；2.2.0 
 ### 独享 Seedbox
 
 ```bash
-bash <(wget -qO- https://raw.githubusercontent.com/jerry048/Dedicated-Seedbox/main/Install.sh) --lang zh-CN \
+bash <(wget -qO- https://raw.githubusercontent.com/race-in/jerry-custom-setup/main/Install.sh) --lang zh-CN \
   --user jerry048 \
   --password-stdin \
   --cache 3072 \
@@ -69,7 +69,7 @@ seedboxctl --lang zh-CN version
 ### 共享 Seedbox
 
 ```bash
-bash <(wget -qO- https://raw.githubusercontent.com/jerry048/Dedicated-Seedbox/main/Install.sh) --lang zh-CN \
+bash <(wget -qO- https://raw.githubusercontent.com/race-in/jerry-custom-setup/main/Install.sh) --lang zh-CN \
   --rootless \
   --webui-username jerry048 \
   --password-stdin \
