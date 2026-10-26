@@ -24,7 +24,7 @@ jobs:
         shell: bash
         run: |
           mapfile -d '' scripts < <(
-            find . -type f \\( -name '*.sh' -o -name '*.bash' -o -path './Install.sh' -o -path './bin/seedboxctl' \\) \\
+            find . -type f \( -name '*.sh' -o -name '*.bash' -o -path './Install.sh' -o -path './bin/seedboxctl' \) \
               -not -path './.git/*' -print0
           )
           if (( ${#scripts[@]} == 0 )); then
@@ -40,7 +40,7 @@ jobs:
         shell: bash
         run: |
           mapfile -d '' scripts < <(
-            find . -type f \\( -name '*.sh' -o -name '*.bash' -o -path './Install.sh' -o -path './bin/seedboxctl' \\) \\
+            find . -type f \( -name '*.sh' -o -name '*.bash' -o -path './Install.sh' -o -path './bin/seedboxctl' \) \
               -not -path './.git/*' -print0
           )
           shellcheck --severity=warning --exclude=SC1091 "${scripts[@]}"
