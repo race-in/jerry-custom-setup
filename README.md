@@ -17,7 +17,7 @@ Create a private password file first, then replace `/path/to/password.txt` and `
 Run as root on a host/full VM you control. This installs **qBittorrent 5.3.0 + libtorrent 2.1.2** and host tuning:
 
 ```bash
-bash <(wget -qO- https://raw.githubusercontent.com/jerry048/Dedicated-Seedbox/main/Install.sh) \
+bash <(wget -qO- https://raw.githubusercontent.com/race-in/jerry-custom-setup/main/Install.sh) \
   --user jerry048 \
   --password-stdin \
   --source static \
@@ -56,7 +56,7 @@ BBR variants (`--bbr-algo`): `bbrv3`, `bbrx`, `bbrx_old`, `bbrw`, `bbr_brutal`, 
 Run as the intended Unix user, **without root or sudo**. This installs qBittorrent only:
 
 ```bash
-bash <(wget -qO- https://raw.githubusercontent.com/jerry048/Dedicated-Seedbox/main/Install.sh) \
+bash <(wget -qO- https://raw.githubusercontent.com/race-in/jerry-custom-setup/main/Install.sh) \
   --rootless \
   --webui-username jerry048 \
   --password-stdin \
@@ -75,7 +75,7 @@ Already installed? Use **upgrade**, not a fresh install over an existing config.
 Deluge **2.2.0** supports patched libtorrent **1.2.20** or **2.0.15**. Debian 12+/Ubuntu 22.04+, root and systemd are required. This selects Deluge instead of qBittorrent:
 
 ```bash
-bash <(wget -qO- https://raw.githubusercontent.com/jerry048/Dedicated-Seedbox/main/Install.sh) \
+bash <(wget -qO- https://raw.githubusercontent.com/race-in/jerry-custom-setup/main/Install.sh) \
   --components deluge \
   --user delugeuser \
   --password-stdin \
