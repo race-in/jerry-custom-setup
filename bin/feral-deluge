@@ -211,9 +211,9 @@ def save(path, config, header):
     fd, tmp = tempfile.mkstemp(prefix=".jerry-config.", dir=config_dir)
     try:
         with os.fdopen(fd, "w") as stream:
-            stream.write(json.dumps(header) + "\\n")
+            stream.write(json.dumps(header) + "\n")
             json.dump(config, stream, sort_keys=True, indent=2)
-            stream.write("\\n")
+            stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
         os.rename(tmp, path)
