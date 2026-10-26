@@ -19,7 +19,7 @@
 在自己控制的主机/完整虚拟机上以 root 运行。安装 **qBittorrent 5.3.0 + libtorrent 2.1.2** 及系统调优：
 
 ```bash
-bash <(wget -qO- https://raw.githubusercontent.com/jerry048/Dedicated-Seedbox/main/Install.sh) --lang zh-CN \
+bash <(wget -qO- https://raw.githubusercontent.com/race-in/jerry-custom-setup/main/Install.sh) --lang zh-CN \
   --user jerry048 \
   --password-stdin \
   --source static \
@@ -58,7 +58,7 @@ BBR 变体（`--bbr-algo`）：`bbrv3`、`bbrx`、`bbrx_old`、`bbrw`、`bbr_bru
 以实际运行实例的 Unix 用户执行，**不要使用 root 或 sudo**。只安装 qBittorrent：
 
 ```bash
-bash <(wget -qO- https://raw.githubusercontent.com/jerry048/Dedicated-Seedbox/main/Install.sh) --lang zh-CN \
+bash <(wget -qO- https://raw.githubusercontent.com/race-in/jerry-custom-setup/main/Install.sh) --lang zh-CN \
   --rootless \
   --webui-username jerry048 \
   --password-stdin \
@@ -77,7 +77,7 @@ bash <(wget -qO- https://raw.githubusercontent.com/jerry048/Dedicated-Seedbox/ma
 Deluge **2.2.0** 支持带调优补丁的 libtorrent **1.2.20** 或 **2.0.15**。需要 Debian 12+/Ubuntu 22.04+、root 和 systemd。下方显式选择 Deluge，不安装 qBittorrent：
 
 ```bash
-bash <(wget -qO- https://raw.githubusercontent.com/jerry048/Dedicated-Seedbox/main/Install.sh) --lang zh-CN \
+bash <(wget -qO- https://raw.githubusercontent.com/race-in/jerry-custom-setup/main/Install.sh) --lang zh-CN \
   --components deluge \
   --user delugeuser \
   --password-stdin \
