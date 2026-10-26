@@ -119,7 +119,7 @@ get_pid() {
   local file="$1" pattern="$2" pid ignored
   [[ -f "$file" && ! -L "$file" ]] || return 1
   # Deluge 1.3 writes its PID file as "PID;PORT", not just "PID".
-  IFS=';' read -r pid ignored < "$file" || true
+  IFS=';' read -r pid _ < "$file" || true
   pid_is_ours "$pid" "$pattern" || return 1
   printf '%s\n' "$pid"
 }
