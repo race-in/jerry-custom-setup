@@ -154,7 +154,8 @@ start_daemon() {
     web_port="$(read_web_port)"
     info "Starting Jerry's private WebUI on port $web_port..."
     # Do not pass -f/--fork: keep the real WebUI process manageable via $!.
-    runtime_env "${RUNTIME}/bin/deluge-web" -c "$CONFIG_DIR" -p "$web_port" -b "$WEB_BASE" -L info -l "$WEB_LOG_FILE" &
+    # Keep the WebUI alive after SSH logout; use a separate launcher log to avoid two writers.
+    nohup runtime_env "${RUNTIME}/bin/deluge-web" -c "$CONFIG_DIR" -p "$web_port" -b "$WEB_BASE" -L info -l "$WEB_LOG_FILE" >>"$CONFIG_DIR/deluge-web-launch.log" 2>&1 </dev/null &
     pid=""
     for ((attempt=0; attempt<10; attempt++)); do
       if pid="$(find_ours_web_pid)"; then break; fi
@@ -334,16 +335,17 @@ atomic(core_path, core)
 web_path = os.path.join(config_dir, "web.conf")
 webcfg = load(web_path)
 webcfg["port"] = web
-webcfg["default_daemon"] = ""
-webcfg["daemon"] = []
+webcfg["default_daemon"] = "127.0.0.1:%s" % rpc
+webcfg["daemon"] = ["127.0.0.1:%s" % rpc]
 atomic(web_path, webcfg)
 PY
 
   local rpc_password web_password salt
   rpc_password="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
   web_password="$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')"
-  salt="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
-  [[ "${#rpc_password}" -eq 64 && "${#web_password}" -eq 48 && "${#salt}" -eq 32 ]] || die "Secure credential generation failed."
+  salt="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n' | sha256sum | awk '{print $1}')"
+  salt="$(printf '%s' "$salt" | sha1sum | awk '{print $1}')"
+  [[ "${#rpc_password}" -eq 64 && "${#web_password}" -eq 48 && "${#salt}" -eq 40 ]] || die "Secure credential generation failed."
   printf '%s:%s:10\n' "$(id -un)" "$rpc_password" > "$AUTH_FILE"
   chmod 600 "$AUTH_FILE"
   SEEDBOX_FERAL_WEB_PASSWORD="$web_password" SEEDBOX_FERAL_WEB_SALT="$salt" "${RUNTIME}/bin/python2.7" - "$WEB_FILE" <<'PY'
@@ -360,7 +362,7 @@ else:
 salt = os.environ["SEEDBOX_FERAL_WEB_SALT"]
 password = os.environ["SEEDBOX_FERAL_WEB_PASSWORD"]
 cfg["pwd_salt"] = salt
-cfg["pwd_sha1"] = hashlib.sha1((password + salt).encode("utf-8")).hexdigest()
+cfg["pwd_sha1"] = hashlib.sha1((salt + password).encode("utf-8")).hexdigest()
 fd, tmp = tempfile.mkstemp(prefix=".web.", dir=os.path.dirname(path))
 with os.fdopen(fd, "w") as stream:
     stream.write(json.dumps({"file": 1}) + "\n")
@@ -406,6 +408,54 @@ show_status() {
   info "Provider config and process are separate and untouched."
 }
 
+reset_web_password() {
+  profile_is_ours || die "No managed Jerry profile found."
+  info "Stopping only Jerry's WebUI before changing its password..."
+  stop_one "$WEB_PID_FILE" deluge-web
+
+  local rc=0
+  runtime_env "${RUNTIME}/bin/python2.7" - <<'PY' || rc=$?
+import getpass
+import hashlib
+import os
+import random
+import sys
+from deluge.configmanager import set_config_dir, ConfigManager
+from deluge.common import utf8_encoded
+
+set_config_dir(os.path.expanduser("~/.config/deluge-jerry"))
+config = ConfigManager("web.conf")
+password = getpass.getpass("New Jerry WebUI password: ")
+confirm = getpass.getpass("Confirm new password: ")
+if not password:
+    print("ERROR: Password cannot be empty.")
+    sys.exit(1)
+if password != confirm:
+    print("ERROR: Passwords do not match.")
+    sys.exit(1)
+salt = hashlib.sha1(str(random.getrandbits(40))).hexdigest()
+digest = hashlib.sha1(salt)
+digest.update(utf8_encoded(password))
+config["pwd_salt"] = salt
+config["pwd_sha1"] = digest.hexdigest()
+for key in ("pwd_md5", "old_pwd_md5", "old_pwd_salt"):
+    if key in config.config:
+        del config.config[key]
+if not config.save():
+    print("ERROR: Could not save web.conf.")
+    sys.exit(1)
+print("Password saved using Deluge 1.3.15's native SHA-1 scheme.")
+PY
+  if ((rc != 0)); then
+    warn "Password reset failed; attempting to bring Jerry services back up."
+    start_daemon || true
+    return "$rc"
+  fi
+
+  start_daemon
+  info "Jerry WebUI password reset complete."
+}
+
 uninstall_profile() {
   local purge=0 yes=0 arg
   for arg in "$@"; do case "$arg" in --purge-data) purge=1 ;; --yes) yes=1 ;; *) die "Unknown uninstall option: $arg" ;; esac; done
@@ -431,6 +481,7 @@ Jerry Deluge 1.3.15 for Feral shared slots (separate private runtime)
 Usage:
   bash bin/feral-deluge install [--jobs N] [--rpc-port PORT] [--incoming-port PORT] [--web-port PORT]
   bash bin/feral-deluge start|stop|restart|status|connection
+  bash bin/feral-deluge reset-password
   bash bin/feral-deluge uninstall [--purge-data --yes]
 
 This builds Jerry's Python 2.7.18 + OpenSSL 1.1.1w + patched libtorrent 1.1.14
@@ -451,6 +502,7 @@ main() {
     restart) require_nonroot; check_runtime; stop_one "$WEB_PID_FILE" deluge-web; stop_one "$PID_FILE" deluged; start_daemon ;;
     status) require_nonroot; show_status ;;
     connection) require_nonroot; show_connection ;;
+    reset-password) require_nonroot; check_runtime; reset_web_password ;;
     uninstall) uninstall_profile "$@" ;;
     help|-h|--help) usage ;;
     *) usage >&2; die "Unknown command: $action" ;;
