@@ -187,7 +187,14 @@ PY
 
 stop_one() {
   local file="$1" pattern="$2" pid attempt
-  if ! pid="$(get_pid "$file" "$pattern")"; then rm -f -- "$file"; return 0; fi
+  if ! pid="$(get_pid "$file" "$pattern")"; then
+    if [[ "$pattern" == "deluge-web" ]] && pid="$(find_ours_web_pid)"; then
+      printf '%s\n' "$pid" > "$file"
+    else
+      rm -f -- "$file"
+      return 0
+    fi
+  fi
   info "Stopping managed $pattern (PID $pid)..."
   kill -TERM "$pid"
   for ((attempt=0; attempt<15; attempt++)); do
@@ -389,7 +396,12 @@ show_status() {
   profile_is_ours || die "No managed Jerry profile found."
   local daemon_pid web_pid
   if daemon_pid="$(get_pid "$PID_FILE" deluged)"; then info "Jerry daemon: running (PID $daemon_pid)"; else info "Jerry daemon: stopped"; fi
-  if web_pid="$(get_pid "$WEB_PID_FILE" deluge-web)"; then info "Jerry WebUI: running (PID $web_pid; port $(read_web_port))"; else info "Jerry WebUI: stopped"; fi
+  if web_pid="$(get_pid "$WEB_PID_FILE" deluge-web)" || web_pid="$(find_ours_web_pid)"; then
+    printf '%s\n' "$web_pid" > "$WEB_PID_FILE"
+    info "Jerry WebUI: running (PID $web_pid; port $(read_web_port))"
+  else
+    info "Jerry WebUI: stopped"
+  fi
   info "Provider config and process are separate and untouched."
 }
 
