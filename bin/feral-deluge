@@ -132,7 +132,11 @@ start_daemon() {
     rpc_port="$(read_core_value daemon_port)"
     validate_port "$rpc_port"
     info "Starting Jerry's private Deluge daemon (RPC $rpc_port)..."
-    runtime_env "${RUNTIME}/bin/deluged" -c "$CONFIG_DIR" -p "$rpc_port" -P "$PID_FILE" -L info -l "$LOG_FILE"
+    # Explicitly detach from SSH so the private daemon survives logout.
+    nohup env -u PYTHONHOME -u PYTHONPATH PYTHONNOUSERSITE=1 \
+      LD_LIBRARY_PATH="${RUNTIME}/lib:${RUNTIME}/openssl/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+      "${RUNTIME}/bin/deluged" -c "$CONFIG_DIR" -p "$rpc_port" -P "$PID_FILE" \
+      -L info -l "$LOG_FILE" >/dev/null 2>&1 </dev/null
     local attempt
     for ((attempt=0; attempt<15; attempt++)); do
       if pid="$(get_pid "$PID_FILE" deluged)"; then break; fi
@@ -155,7 +159,10 @@ start_daemon() {
     info "Starting Jerry's private WebUI on port $web_port..."
     # Do not pass -f/--fork: keep the real WebUI process manageable via $!.
     # Keep the WebUI alive after SSH logout; use a separate launcher log to avoid two writers.
-    nohup runtime_env "${RUNTIME}/bin/deluge-web" -c "$CONFIG_DIR" -p "$web_port" -b "$WEB_BASE" -L info -l "$WEB_LOG_FILE" >>"$CONFIG_DIR/deluge-web-launch.log" 2>&1 </dev/null &
+    nohup env -u PYTHONHOME -u PYTHONPATH PYTHONNOUSERSITE=1 \
+      LD_LIBRARY_PATH="${RUNTIME}/lib:${RUNTIME}/openssl/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+      "${RUNTIME}/bin/deluge-web" -c "$CONFIG_DIR" -p "$web_port" -b "$WEB_BASE" \
+      -L info -l "$WEB_LOG_FILE" >>"$CONFIG_DIR/deluge-web-launch.log" 2>&1 </dev/null &
     pid=""
     for ((attempt=0; attempt<10; attempt++)); do
       if pid="$(find_ours_web_pid)"; then break; fi
