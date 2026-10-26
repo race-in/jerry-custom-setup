@@ -19,7 +19,10 @@ from deluge.ui.web import server
 from service_identity import VerificationError
 
 assert sys.version_info[:3] == (2, 7, 18), sys.version
-assert sys.prefix == "/opt/deluge-1.3.15", sys.prefix
+import os
+
+EXPECTED_PREFIX = os.environ.get("SEEDBOX_DE_PREFIX", os.path.expanduser("~/.local/opt/deluge-1.3.15-jerry"))
+assert os.path.realpath(sys.prefix) == os.path.realpath(EXPECTED_PREFIX), (sys.prefix, EXPECTED_PREFIX)
 assert deluge.common.get_version() == "1.3.15"
 assert libtorrent.version.startswith("1.1.14"), libtorrent.version
 # Version strings alone cannot distinguish stock and patched libtorrent builds.
