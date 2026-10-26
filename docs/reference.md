@@ -49,7 +49,7 @@ Deluge needs root and systemd. 1.3.15 supports Debian 11+/Ubuntu 20.04+; 2.2.0 r
 ### Dedicated seedbox
 
 ```bash
-bash <(wget -qO- https://raw.githubusercontent.com/jerry048/Dedicated-Seedbox/main/Install.sh) \
+bash <(wget -qO- https://raw.githubusercontent.com/race-in/jerry-custom-setup/main/Install.sh) \
   --user jerry048 \
   --password-stdin \
   --cache 3072 \
@@ -65,7 +65,7 @@ seedboxctl version
 ### Shared/rootless seedbox
 
 ```bash
-bash <(wget -qO- https://raw.githubusercontent.com/jerry048/Dedicated-Seedbox/main/Install.sh) \
+bash <(wget -qO- https://raw.githubusercontent.com/race-in/jerry-custom-setup/main/Install.sh) \
   --rootless \
   --webui-username jerry048 \
   --password-stdin \
