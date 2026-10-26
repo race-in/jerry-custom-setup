@@ -90,7 +90,7 @@ Omitting version options selects legacy **1.3.15 / 1.1.14**, supported on Debian
 
 ### Feral shared slot: separate rootless Deluge instance
 
-Feral shared slots do not provide root, APT, or system systemd. First install Deluge 1.x from Feral's web manager, as described in [Feral's Deluge guide](https://www.feralhosting.com/wiki/software/deluge). Then use the separate helper below as your normal SSH user (never with `sudo`). It reuses the provider's Python 2.7/Deluge 1.x runtime, creates an isolated config under `~/.config/deluge-jerry` and data under `~/private/deluge-jerry`, and does not edit `~/.config/deluge` or replace the provider's process.
+Feral shared slots do not provide root, APT, or system systemd. First install Deluge 1.x from Feral's web manager, as described in [Feral's Deluge guide](https://www.feralhosting.com/wiki/software/deluge). Then use the separate helper below as your normal SSH user (never with `sudo`). It builds a separate Jerry runtime (Python 2.7.18, OpenSSL 1.1.1w, patched libtorrent 1.1.14, Deluge 1.3.15) under `~/.local/opt/deluge-1.3.15-jerry`, then creates its own config under `~/.config/deluge-jerry` and data under `~/private/deluge-jerry`. It does not replace the provider's runtime or edit `~/.config/deluge`.
 
 From a checkout of this repository:
 
