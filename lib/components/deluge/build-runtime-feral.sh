@@ -108,7 +108,7 @@ while read -r digest filename url; do
 done <"${HERE}/sources.lock"
 
 WORK="$(mktemp -d "${WORKROOT}/build.XXXXXX")"
-trap 'rc=$?; if ((rc)); then printf "Runtime build failed; source/build evidence retained at %s\n" "${WORK}" >&2; else rm -rf -- "${WORK}"; fi' EXIT
+trap 'rc=$?; if ((rc)); then rm -rf -- "${PREFIX}"; printf "Runtime build failed; incomplete private prefix removed; source/build evidence retained at %s\n" "${WORK}" >&2; else rm -rf -- "${WORK}"; fi' EXIT
 # Verify and copy all build sources into this account-private temporary directory.
 mkdir "${WORK}/sources"
 while read -r digest filename url; do
