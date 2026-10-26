@@ -50,6 +50,7 @@ jobs:
           shellcheck --severity=warning --exclude=SC1090,SC1091 \
             ./lib/components/deluge/build-runtime.sh \
             ./lib/components/deluge/build-runtime-2.sh \
+            ./lib/components/deluge/build-runtime-feral.sh \
             ./lib/components/deluge.bash \
             ./bin/feral-deluge
 
