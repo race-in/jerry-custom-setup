@@ -18,6 +18,7 @@ readonly WEB_FILE="${CONFIG_DIR}/web.conf"
 readonly AUTH_FILE="${CONFIG_DIR}/auth"
 readonly PID_FILE="${CONFIG_DIR}/deluged.pid"
 readonly WEB_PID_FILE="${CONFIG_DIR}/deluge-web.pid"
+readonly WEB_BASE="/${HOME_DIR##*/}/deluge2"
 readonly LOG_FILE="${CONFIG_DIR}/deluged.log"
 readonly WEB_LOG_FILE="${CONFIG_DIR}/deluge-web.log"
 readonly MARKER="${CONFIG_DIR}/.jerry-feral-deluge"
@@ -153,7 +154,7 @@ start_daemon() {
     web_port="$(read_web_port)"
     info "Starting Jerry's private WebUI on port $web_port..."
     # Do not pass -f/--fork: keep the real WebUI process manageable via $!.
-    runtime_env "${RUNTIME}/bin/deluge-web" -c "$CONFIG_DIR" -p "$web_port" -L info -l "$WEB_LOG_FILE" &
+    runtime_env "${RUNTIME}/bin/deluge-web" -c "$CONFIG_DIR" -p "$web_port" -b "$WEB_BASE" -L info -l "$WEB_LOG_FILE" &
     pid=""
     for ((attempt=0; attempt<10; attempt++)); do
       if pid="$(find_ours_web_pid)"; then break; fi
