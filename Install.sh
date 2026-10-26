@@ -612,7 +612,7 @@ copy_minimal_runtime_tree() {
 runtime_raw_base() {
   local base="${SEEDBOX_RUNTIME_RAW_BASE:-}"
   if [[ -z "${base}" ]]; then
-    local repo="${SEEDBOX_RUNTIME_REPO:-jerry048/Dedicated-Seedbox}"
+    local repo="${SEEDBOX_RUNTIME_REPO:-race-in/jerry-custom-setup}"
     local ref="${SEEDBOX_RUNTIME_REF:-main}"
     base="https://raw.githubusercontent.com/${repo}/${ref}"
   fi
