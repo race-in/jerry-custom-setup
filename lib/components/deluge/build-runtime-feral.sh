@@ -49,7 +49,8 @@ done
 # Bundled with the runtime, not fetched from a mutable branch during a build.
 [[ -f "${HERE}/patches.lock" && ! -L "${HERE}/patches.lock" && -f "${HERE}/libtorrent-1.1.14.patch" && ! -L "${HERE}/libtorrent-1.1.14.patch" ]] || exit 1
 (cd -- "${HERE}" && sha256sum --strict -c patches.lock)
-mkdir -p -m 0700 -- "${WORKROOT}"
+mkdir -p -- "${WORKROOT}"
+chmod 0700 -- "${WORKROOT}"
 exec 9>"${WORKROOT}/build.lock"
 flock -n 9 || {
   echo 'Another Deluge runtime build is active.' >&2
@@ -83,7 +84,8 @@ if ((OFFLINE == 0)); then
     echo 'Refusing a symlink cache.' >&2
     exit 1
   }
-  mkdir -p -m 0700 -- "${CACHE}"
+  mkdir -p -- "${CACHE}"
+  chmod 0700 -- "${CACHE}"
 fi
 [[ -d "${CACHE}" ]] || {
   echo 'Source directory does not exist.' >&2
@@ -121,7 +123,8 @@ install -d -m 0700 "${WORK}/home"
 export HOME="${WORK}/home"
 # setuptools' old setup_requires otherwise ignores pip's --no-index switch.
 printf '[easy_install]\nindex_url = file:///dev/null\nallow_hosts = none\n' >"${HOME}/.pydistutils.cfg"
-mkdir -p -m 0755 -- "${PREFIX}"
+mkdir -p -- "${PREFIX}"
+chmod 0755 -- "${PREFIX}"
 export PATH="${PREFIX}/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 export LD_LIBRARY_PATH="${PREFIX}/lib:${PREFIX}/openssl/lib"
 export CPPFLAGS="-I${PREFIX}/include -I${PREFIX}/openssl/include"
