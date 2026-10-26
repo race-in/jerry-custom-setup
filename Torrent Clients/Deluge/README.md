@@ -12,6 +12,12 @@ The optional `seedboxctl deluge` component supports these private native runtime
 
 It uses the same lifecycle, instance state, progress, installer logs and monitoring as qBittorrent. It does not replace system Python, install obsolete distribution packages, register global library paths, or require Docker. Deluge is not part of the default profile and does not support rootless installation.
 
+## Shared seedbox compatibility (Feral and similar hosts)
+
+**Do not run this Deluge component on a shared/rootless seedbox such as Feral.** The lifecycle manager requires root and systemd, and the native builder writes under `/opt`, `/var/cache`, and `/run/lock`, installs APT build dependencies, and expects a full Debian/Ubuntu host. Debian 9/Stretch is also below the declared minimum OS version. Removing only the OS check does not make the rest of the installer rootless.
+
+On a managed shared seedbox, keep the provider's existing Deluge installation and its existing configuration, plugins, torrent files, session state and data. Do not run the private-runtime builder or replace the system Python. A genuinely rootless Feral setup would need a separate, specifically tested build/runtime and process-management path; this repository does not currently provide one.
+
 ## Legacy security warning
 
 Deluge 1.3.15, Python 2.7, OpenSSL 1.1.1 and the compatible Python packages are unsupported. Pinning them makes the installation reproducible, **not secure or maintained**. Use this only for a workflow that specifically requires Deluge 1.3.15. The torrent engine still handles untrusted network traffic; private installation and systemd restrictions do not remove its vulnerabilities.
@@ -181,4 +187,4 @@ sudo seedboxctl deluge logs \
 python3 --version
 ```
 
-Status is read-only and aggregates **both** services; “running” is not an authenticated application/transfer test. It retains the shared JSON `instances` contract and returns failure with `--check` if either service is stopped, failed or unverifiable. Service logs combine both journals; installer logs include `deluge.*` steps, including combined installs. `--source all` includes service and installer logs; there is no application-file source. See the [shared monitoring reference](../../docs/reference.md#status) for exit codes and log-source selection. Raw logs, paths, versions and JSON values are never translated; review sensitive data before sharing. The final command still uses host Python 3. Do not replace system Python, install old cross-distribution `.deb` files, run global `pip`, or bypass TLS/hash checks.
+Status is read-only and aggregates **both** services; “running” is not an authenticated application/transfer test. It retains the shared JSON `instances` contract and returns failure with `--check` if either service is stopped, failed or unverifiable. Service logs combine both daemon and WebUI journals; installer logs include `deluge.*` steps, including combined installs. `--source all` includes service and installer logs; there is no application-file source. See the [shared monitoring reference](../../docs/reference.md#status) for exit codes and log-source selection. Raw logs, paths, versions and JSON values are never translated; review sensitive data before sharing. The final command still uses host Python 3. Do not replace system Python, install old cross-distribution `.deb` files, run global `pip`, or bypass TLS/hash checks.
