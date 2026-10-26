@@ -66,7 +66,7 @@ PY
 
 choose_port() {
   local low="$1" high="$2" attempt candidate
-  for attempt in {1..100}; do
+  for ((attempt=0; attempt<100; attempt++)); do
     candidate="$(shuf -i "${low}-${high}" -n 1)" || continue
     if port_is_free "$candidate"; then printf '%s\n' "$candidate"; return 0; fi
   done
@@ -114,7 +114,7 @@ start_daemon() {
     info "Starting Jerry's private Deluge daemon (RPC $rpc_port)..."
     runtime_env "${RUNTIME}/bin/deluged" -c "$CONFIG_DIR" -p "$rpc_port" -P "$PID_FILE" -L info -l "$LOG_FILE"
     local attempt
-    for attempt in {1..15}; do
+    for ((attempt=0; attempt<15; attempt++)); do
       if pid="$(get_pid "$PID_FILE" deluged)"; then break; fi
       sleep 1
     done
