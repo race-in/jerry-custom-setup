@@ -5,7 +5,6 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 umask 077
 
-readonly APP_NAME="jerry-feral-deluge"
 readonly HOME_DIR="${HOME:?HOME is not set}"
 readonly CONFIG_DIR="${HOME_DIR}/.config/deluge-jerry"
 readonly DATA_DIR="${HOME_DIR}/private/deluge-jerry"
@@ -169,7 +168,7 @@ stop_daemon() {
 }
 
 install_profile() {
-  local rpc_port="${1:-}" incoming_port="${2:-}" default_rpc default_incoming
+  local rpc_port="${1:-}" incoming_port="${2:-}" default_rpc
   require_nonroot
   require_tools
   check_provider_runtime
