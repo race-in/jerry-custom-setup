@@ -79,16 +79,12 @@ read_core_value() {
 import json, sys
 def load_config(path):
     with open(path, "r") as stream:
-        first = stream.readline()
-        try:
-            header = json.loads(first)
-        except ValueError:
-            stream.seek(0)
-            return json.load(stream)
-        if isinstance(header, dict) and "file" in header:
-            return json.load(stream)
-        stream.seek(0)
-        return json.load(stream)
+        data = stream.read().lstrip()
+    decoder = json.JSONDecoder()
+    header, end = decoder.raw_decode(data)
+    if isinstance(header, dict) and "file" in header:
+        return json.loads(data[end:].lstrip())
+    return json.loads(data)
 config = load_config(sys.argv[1])
 print(config.get(sys.argv[2], ""))
 PY
@@ -155,16 +151,12 @@ read_web_port() {
 import json, sys
 def load_config(path):
     with open(path, "r") as stream:
-        first = stream.readline()
-        try:
-            header = json.loads(first)
-        except ValueError:
-            stream.seek(0)
-            return json.load(stream)
-        if isinstance(header, dict) and "file" in header:
-            return json.load(stream)
-        stream.seek(0)
-        return json.load(stream)
+        data = stream.read().lstrip()
+    decoder = json.JSONDecoder()
+    header, end = decoder.raw_decode(data)
+    if isinstance(header, dict) and "file" in header:
+        return json.loads(data[end:].lstrip())
+    return json.loads(data)
 config = load_config(sys.argv[1])
 print(config.get("port", 8112))
 PY
@@ -237,16 +229,12 @@ install_profile() {
 import json, sys
 def load_config(path):
     with open(path, "r") as stream:
-        first = stream.readline()
-        try:
-            header = json.loads(first)
-        except ValueError:
-            stream.seek(0)
-            return json.load(stream)
-        if isinstance(header, dict) and "file" in header:
-            return json.load(stream)
-        stream.seek(0)
-        return json.load(stream)
+        data = stream.read().lstrip()
+    decoder = json.JSONDecoder()
+    header, end = decoder.raw_decode(data)
+    if isinstance(header, dict) and "file" in header:
+        return json.loads(data[end:].lstrip())
+    return json.loads(data)
 config = load_config(sys.argv[1])
 print(config.get("daemon_port", 58846))
 PY
@@ -279,16 +267,12 @@ incoming = int(os.environ["SEEDBOX_FERAL_INCOMING_PORT"])
 web = int(os.environ["SEEDBOX_FERAL_WEB_PORT"])
 def load(path):
     with open(path, "r") as stream:
-        first = stream.readline()
-        try:
-            header = json.loads(first)
-        except ValueError:
-            stream.seek(0)
-            return json.load(stream)
-        if isinstance(header, dict) and "file" in header:
-            return json.load(stream)
-        stream.seek(0)
-        return json.load(stream)
+        data = stream.read().lstrip()
+    decoder = json.JSONDecoder()
+    header, end = decoder.raw_decode(data)
+    if isinstance(header, dict) and "file" in header:
+        return json.loads(data[end:].lstrip())
+    return json.loads(data)
 def atomic(path, config):
     fd, tmp = tempfile.mkstemp(prefix=".config.", dir=config_dir)
     try:
@@ -335,18 +319,13 @@ PY
 import hashlib, json, os, sys, tempfile
 path = sys.argv[1]
 with open(path, "r") as stream:
-    first = stream.readline()
-    try:
-        header = json.loads(first)
-    except ValueError:
-        stream.seek(0)
-        cfg = json.load(stream)
-    else:
-        if isinstance(header, dict) and "file" in header:
-            cfg = json.load(stream)
-        else:
-            stream.seek(0)
-            cfg = json.load(stream)
+    data = stream.read().lstrip()
+decoder = json.JSONDecoder()
+header, end = decoder.raw_decode(data)
+if isinstance(header, dict) and "file" in header:
+    cfg = json.loads(data[end:].lstrip())
+else:
+    cfg = json.loads(data)
 salt = os.environ["SEEDBOX_FERAL_WEB_SALT"]
 password = os.environ["SEEDBOX_FERAL_WEB_PASSWORD"]
 cfg["pwd_salt"] = salt
